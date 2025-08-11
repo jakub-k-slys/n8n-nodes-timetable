@@ -1,5 +1,5 @@
 {
-	"node": "n8n-nodes-base.scheduleTrigger",
+	"node": "n8n-nodes-base.timetableTrigger",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": ["Core Nodes"],

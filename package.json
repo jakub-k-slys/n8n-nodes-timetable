@@ -22,10 +22,10 @@
   "scripts": {
     "build": "npx rimraf dist && tsc && gulp build:icons",
     "dev": "tsc --watch",
-    "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials package.json",
-    "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "npm run build && npx eslint -c eslint.prepublish.config.js nodes credentials package.json",
+    "format": "prettier nodes --write",
+    "lint": "eslint nodes package.json",
+    "lintfix": "eslint nodes package.json --fix",
+    "prepublishOnly": "npm run build && npx eslint -c eslint.prepublish.config.js nodes package.json",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:unit": "jest",
@@ -38,7 +38,7 @@
     "n8nNodesApiVersion": 1,
     "credentials": [],
     "nodes": [
-      "dist/nodes/Timetable/Substack.node.js"
+      "dist/nodes/Timetable/TimetableTrigger.node.js"
     ]
   },
   "devDependencies": {

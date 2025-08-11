@@ -1,258 +1,253 @@
 import * as n8nWorkflow from 'n8n-workflow';
 
-import { intervalToRecurrence, recurrenceCheck, toCronExpression } from '../../nodes/Timetable/GenericFunctions';
-import type { IRecurrenceRule } from '../../nodes/Timetable/SchedulerInterface';
+// Mock moment-timezone at the top level
+jest.mock('moment-timezone', () => {
+	const originalMoment = jest.requireActual('moment-timezone');
+	return {
+		...originalMoment,
+		tz: jest.fn(() => ({
+			toDate: () => new Date('2024-01-01T12:30:00Z') // Mock current time to 12:30
+		}))
+	};
+});
 
-describe('toCronExpression', () => {
-	Object.defineProperty(n8nWorkflow, 'randomInt', {
-		value: (min: number, max: number) => Math.floor((min + max) / 2),
+import { 
+	getNextSlotHour, 
+	getNextRunTime, 
+	shouldTriggerAtTime, 
+	toCronExpression 
+} from '../../nodes/Timetable/GenericFunctions';
+import type { TimetableConfig } from '../../nodes/Timetable/SchedulerInterface';
+
+describe('getNextSlotHour', () => {
+	it('should return next available slot within the same day', () => {
+		const now = new Date('2024-01-01T10:00:00Z');
+		const fixedHours = [12, 16, 21];
+		
+		const result = getNextSlotHour(now, fixedHours);
+		
+		expect(result).toEqual({
+			hour: 12,
+			isTomorrow: false
+		});
 	});
 
-	it('should return cron expression for cronExpression field', () => {
-		const result = toCronExpression({
-			field: 'cronExpression',
-			expression: '1 2 3 * * *',
+	it('should return next available slot later in the day', () => {
+		const now = new Date('2024-01-01T14:00:00Z');
+		const fixedHours = [12, 16, 21];
+		
+		const result = getNextSlotHour(now, fixedHours);
+		
+		expect(result).toEqual({
+			hour: 16,
+			isTomorrow: false
 		});
-		expect(result).toEqual('1 2 3 * * *');
 	});
 
-	it('should return cron expression for seconds interval', () => {
-		const result = toCronExpression({
-			field: 'seconds',
-			secondsInterval: 10,
+	it('should return first slot of tomorrow when all today slots have passed', () => {
+		const now = new Date('2024-01-01T22:00:00Z');
+		const fixedHours = [12, 16, 21];
+		
+		const result = getNextSlotHour(now, fixedHours);
+		
+		expect(result).toEqual({
+			hour: 12,
+			isTomorrow: true
 		});
-		expect(result).toEqual('*/10 * * * * *');
 	});
 
-	it('should return cron expression for minutes interval', () => {
-		const result = toCronExpression({
-			field: 'minutes',
-			minutesInterval: 30,
+	it('should handle single fixed hour', () => {
+		const now = new Date('2024-01-01T10:00:00Z');
+		const fixedHours = [15];
+		
+		const result = getNextSlotHour(now, fixedHours);
+		
+		expect(result).toEqual({
+			hour: 15,
+			isTomorrow: false
 		});
-		expect(result).toEqual('30 */30 * * * *');
-	});
-
-	it('should return cron expression for hours interval', () => {
-		const result = toCronExpression({
-			field: 'hours',
-			hoursInterval: 3,
-			triggerAtMinute: 22,
-		});
-		expect(result).toEqual('30 22 */3 * * *');
-
-		const result1 = toCronExpression({
-			field: 'hours',
-			hoursInterval: 3,
-		});
-		expect(result1).toEqual('30 30 */3 * * *');
-	});
-
-	it('should return cron expression for days interval', () => {
-		const result = toCronExpression({
-			field: 'days',
-			daysInterval: 4,
-			triggerAtMinute: 30,
-			triggerAtHour: 10,
-		});
-		expect(result).toEqual('30 30 10 * * *');
-
-		const result1 = toCronExpression({
-			field: 'days',
-			daysInterval: 4,
-		});
-		expect(result1).toEqual('30 30 12 * * *');
-	});
-
-	it('should return cron expression for weeks interval', () => {
-		const result = toCronExpression({
-			field: 'weeks',
-			weeksInterval: 2,
-			triggerAtMinute: 0,
-			triggerAtHour: 9,
-			triggerAtDay: [1, 3, 5],
-		});
-		expect(result).toEqual('30 0 9 * * 1,3,5');
-		const result1 = toCronExpression({
-			field: 'weeks',
-			weeksInterval: 2,
-			triggerAtDay: [1, 3, 5],
-		});
-		expect(result1).toEqual('30 30 12 * * 1,3,5');
-	});
-
-	it('should return cron expression for months interval', () => {
-		const result = toCronExpression({
-			field: 'months',
-			monthsInterval: 3,
-			triggerAtMinute: 0,
-			triggerAtHour: 0,
-			triggerAtDayOfMonth: 1,
-		});
-		expect(result).toEqual('30 0 0 1 */3 *');
-		const result1 = toCronExpression({
-			field: 'months',
-			monthsInterval: 3,
-		});
-		expect(result1).toEqual('30 30 12 15 */3 *');
 	});
 });
 
-describe('recurrenceCheck', () => {
-	it('should return true if activated=false', () => {
-		const result = recurrenceCheck({ activated: false }, [], 'UTC');
-		expect(result).toBe(true);
+describe('getNextRunTime', () => {
+	beforeEach(() => {
+		// Mock randomInt to return a predictable value for testing
+		Object.defineProperty(n8nWorkflow, 'randomInt', {
+			value: jest.fn().mockReturnValue(30),
+			configurable: true,
+		});
 	});
 
-	it('should return false if intervalSize is falsey', () => {
-		const result = recurrenceCheck(
-			{
-				activated: true,
-				index: 0,
-				intervalSize: 0,
-				typeInterval: 'days',
-			},
-			[],
-			'UTC',
-		);
+	it('should return next run time without randomization', () => {
+		const now = new Date('2024-01-01T10:00:00Z');
+		const config: TimetableConfig = {
+			fixedHours: [12, 16, 21],
+			randomizeMinutes: false
+		};
+		
+		const result = getNextRunTime(now, config);
+		
+		expect(result.candidate.getHours()).toBe(12);
+		expect(result.candidate.getMinutes()).toBe(0);
+		expect(result.candidate.getDate()).toBe(1); // Same day
+	});
+
+	it('should return next run time with randomization', () => {
+		const now = new Date('2024-01-01T10:00:00Z');
+		const config: TimetableConfig = {
+			fixedHours: [12, 16, 21],
+			randomizeMinutes: true,
+			minMinute: 0,
+			maxMinute: 59
+		};
+		
+		const result = getNextRunTime(now, config);
+		
+		expect(result.candidate.getHours()).toBe(12);
+		expect(result.candidate.getMinutes()).toBe(30); // Mock value
+		expect(result.candidate.getDate()).toBe(1); // Same day
+	});
+
+	it('should return next run time for tomorrow', () => {
+		const now = new Date('2024-01-01T22:00:00Z');
+		const config: TimetableConfig = {
+			fixedHours: [12, 16, 21],
+			randomizeMinutes: false
+		};
+		
+		const result = getNextRunTime(now, config);
+		
+		expect(result.candidate.getHours()).toBe(12);
+		expect(result.candidate.getMinutes()).toBe(0);
+		expect(result.candidate.getDate()).toBe(2); // Next day
+	});
+
+	it('should respect minute range limits', () => {
+		const mockRandomInt = n8nWorkflow.randomInt as jest.Mock;
+		mockRandomInt.mockReturnValue(45);
+		
+		const now = new Date('2024-01-01T10:00:00Z');
+		const config: TimetableConfig = {
+			fixedHours: [12, 16, 21],
+			randomizeMinutes: true,
+			minMinute: 30,
+			maxMinute: 50
+		};
+		
+		getNextRunTime(now, config);
+		
+		expect(mockRandomInt).toHaveBeenCalledWith(30, 51); // maxMinute + 1
+	});
+});
+
+describe('shouldTriggerAtTime', () => {
+	it('should return false when current hour is not in fixed hours', () => {
+		const currentTime = new Date('2024-01-01T10:30:00Z'); // 10:30 AM
+		const config: TimetableConfig = {
+			fixedHours: [16, 21], // 4pm, 9pm - doesn't include 10am
+			randomizeMinutes: true
+		};
+		
+		const result = shouldTriggerAtTime(currentTime, undefined, config);
+		
 		expect(result).toBe(false);
 	});
 
-	it('should return true only once for a day cron', () => {
-		const recurrence: IRecurrenceRule = {
-			activated: true,
-			index: 0,
-			intervalSize: 2,
-			typeInterval: 'days',
+	it('should return true for first trigger when hour matches', () => {
+		const currentTime = new Date('2024-01-01T12:30:00Z'); // This will be hour 13 in my timezone
+		const actualHour = currentTime.getHours();
+		const config: TimetableConfig = {
+			fixedHours: [actualHour], // Use the actual hour that JS will interpret
+			randomizeMinutes: true
 		};
-		const recurrenceRules: number[] = [];
-		const result1 = recurrenceCheck(recurrence, recurrenceRules, 'UTC');
-		expect(result1).toBe(true);
-		const result2 = recurrenceCheck(recurrence, recurrenceRules, 'UTC');
-		expect(result2).toBe(false);
+		
+		const result = shouldTriggerAtTime(currentTime, undefined, config);
+		
+		expect(result).toBe(true);
+	});
+
+	it('should prevent multiple triggers in the same hour', () => {
+		const currentTime = new Date('2024-01-01T12:30:00Z');
+		const actualHour = currentTime.getHours();
+		const config: TimetableConfig = {
+			fixedHours: [actualHour], // Use actual hour
+			randomizeMinutes: true
+		};
+		
+		// Last trigger was 10 minutes ago in the same hour
+		const lastTriggerTime = currentTime.getTime() - (10 * 60 * 1000);
+		
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		
+		expect(result).toBe(false);
+	});
+
+	it('should allow trigger after sufficient time has passed', () => {
+		const currentTime = new Date('2024-01-01T12:30:00Z');
+		const actualHour = currentTime.getHours();
+		const config: TimetableConfig = {
+			fixedHours: [actualHour], // Use actual hour
+			randomizeMinutes: true
+		};
+		
+		// Last trigger was more than 1 hour ago
+		const lastTriggerTime = currentTime.getTime() - (2 * 60 * 60 * 1000);
+		
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		
+		expect(result).toBe(true);
+	});
+
+	it('should allow trigger in different hour even if less than 1 hour passed', () => {
+		const currentTime = new Date('2024-01-01T16:10:00Z');
+		const actualCurrentHour = currentTime.getHours();
+		const config: TimetableConfig = {
+			fixedHours: [actualCurrentHour], // Use actual current hour
+			randomizeMinutes: true
+		};
+		
+		// Create a time that's in a different hour but less than 1 hour ago
+		const earlierTime = new Date(currentTime);
+		earlierTime.setHours(actualCurrentHour - 1); // Previous hour
+		const lastTriggerTime = earlierTime.getTime();
+		
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		
+		expect(result).toBe(true);
 	});
 });
 
-describe('intervalToRecurrence', () => {
-	it('should return recurrence rule for seconds interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'seconds',
-				secondsInterval: 10,
-			},
-			0,
-		);
-		expect(result.activated).toBe(false);
+describe('toCronExpression', () => {
+	it('should generate cron expression for fixed hours', () => {
+		const config: TimetableConfig = {
+			fixedHours: [12, 16, 21],
+			randomizeMinutes: true
+		};
+		
+		const result = toCronExpression(config);
+		
+		expect(result).toBe('0 * 12,16,21 * * *');
 	});
 
-	it('should return recurrence rule for minutes interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'minutes',
-				minutesInterval: 30,
-			},
-			1,
-		);
-		expect(result.activated).toBe(false);
+	it('should generate cron expression for single hour', () => {
+		const config: TimetableConfig = {
+			fixedHours: [15],
+			randomizeMinutes: false
+		};
+		
+		const result = toCronExpression(config);
+		
+		expect(result).toBe('0 * 15 * * *');
 	});
 
-	it('should return recurrence rule for hours interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'hours',
-				hoursInterval: 3,
-				triggerAtMinute: 22,
-			},
-			2,
-		);
-		expect(result).toEqual({
-			activated: true,
-			index: 2,
-			intervalSize: 3,
-			typeInterval: 'hours',
-		});
-
-		const result1 = intervalToRecurrence(
-			{
-				field: 'hours',
-				hoursInterval: 3,
-			},
-			3,
-		);
-		expect(result1).toEqual({
-			activated: true,
-			index: 3,
-			intervalSize: 3,
-			typeInterval: 'hours',
-		});
-	});
-
-	it('should return recurrence rule for days interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'days',
-				daysInterval: 4,
-				triggerAtMinute: 30,
-				triggerAtHour: 10,
-			},
-			4,
-		);
-		expect(result).toEqual({
-			activated: true,
-			index: 4,
-			intervalSize: 4,
-			typeInterval: 'days',
-		});
-
-		const result1 = intervalToRecurrence(
-			{
-				field: 'days',
-				daysInterval: 4,
-			},
-			5,
-		);
-		expect(result1).toEqual({
-			activated: true,
-			index: 5,
-			intervalSize: 4,
-			typeInterval: 'days',
-		});
-	});
-
-	it('should return recurrence rule for weeks interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'weeks',
-				weeksInterval: 2,
-				triggerAtMinute: 0,
-				triggerAtHour: 9,
-				triggerAtDay: [1, 3, 5],
-			},
-			6,
-		);
-		expect(result).toEqual({
-			activated: true,
-			index: 6,
-			intervalSize: 2,
-			typeInterval: 'weeks',
-		});
-	});
-
-	it('should return recurrence rule for months interval', () => {
-		const result = intervalToRecurrence(
-			{
-				field: 'months',
-				monthsInterval: 3,
-				triggerAtMinute: 0,
-				triggerAtHour: 0,
-				triggerAtDayOfMonth: 1,
-			},
-			8,
-		);
-		expect(result).toEqual({
-			activated: true,
-			index: 8,
-			intervalSize: 3,
-			typeInterval: 'months',
-		});
+	it('should generate cron expression for multiple unsorted hours', () => {
+		const config: TimetableConfig = {
+			fixedHours: [21, 9, 15, 6],
+			randomizeMinutes: true
+		};
+		
+		const result = toCronExpression(config);
+		
+		expect(result).toBe('0 * 21,9,15,6 * * *');
 	});
 });
