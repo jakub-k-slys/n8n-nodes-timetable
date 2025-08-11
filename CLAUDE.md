@@ -29,16 +29,15 @@ npm run prepublishOnly # Full build and lint check for publishing
 ## Architecture
 
 ### Node Structure
-This is an n8n community node package that provides a Schedule Trigger node for timetable-based workflow triggers.
+This is an n8n community node package that provides a Timetable Trigger node for fixed time slot scheduling with optional minute randomization.
 
 **Main Components:**
-- `nodes/Timetable/ScheduleTrigger.node.ts` - Main trigger node implementation
-- `nodes/Timetable/GenericFunctions.ts` - Utility functions for cron expression handling and recurrence logic
-- `nodes/Timetable/SchedulerInterface.ts` - TypeScript interfaces for scheduling rules
+- `nodes/Timetable/TimetableTrigger.node.ts` - Main trigger node implementation
+- `nodes/Timetable/GenericFunctions.ts` - Core scheduling logic and utility functions
+- `nodes/Timetable/SchedulerInterface.ts` - TypeScript interfaces for timetable configuration
 
 ### Key Dependencies
 - **n8n-workflow** - Core n8n interfaces and utilities (peer dependency)
-- **cron** - CRON expression parsing and scheduling
 - **moment-timezone** - Timezone-aware date/time handling
 
 ### Build System
@@ -46,14 +45,25 @@ This is an n8n community node package that provides a Schedule Trigger node for 
 - **Gulp**: Used for icon building (`gulp build:icons`)
 - **ESLint**: Uses n8n-nodes-base plugin for n8n-specific linting rules
 
-### Schedule Trigger Logic
-The Schedule Trigger supports multiple interval types:
-- Seconds, minutes, hours (simple intervals)
-- Days, weeks, months (with time specifications)
-- Custom cron expressions
-- Multiple trigger rules per node
+### Timetable Trigger Logic
+The Timetable Trigger uses a fixed time slot approach:
 
-**Recurrence Handling**: Uses `recurrenceCheck()` to prevent over-triggering when cron expressions fire more frequently than intended intervals (e.g., daily triggers that need to respect multi-day intervals).
+**Configuration Options:**
+- **Fixed Hours**: Comma-separated list of hours (0-23) when workflows trigger
+- **Minute Randomization**: Optional randomization of minutes within each hour
+- **Minute Range**: Configurable min/max minute values for randomization
+
+**Core Functions:**
+- `getNextSlotHour()` - Determines next available time slot
+- `getNextRunTime()` - Calculates next execution with optional randomization  
+- `shouldTriggerNow()` - Prevents multiple triggers within same hour
+- `toCronExpression()` - Generates cron expression for fixed hours
+
+**Scheduling Behavior:**
+- Triggers only during specified fixed hours (e.g., 12pm, 4pm, 9pm)
+- Randomizes minutes within each hour for organic scheduling
+- Automatically handles day rollovers when all slots have passed
+- Prevents duplicate triggers within the same hour
 
 ### Testing
 - Jest configuration in `jest.config.js`
@@ -65,7 +75,7 @@ The Schedule Trigger supports multiple interval types:
 
 ### Node Registration
 - Node is registered in package.json under `n8n.nodes` array
-- Build output goes to `dist/nodes/Timetable/Substack.node.js` (note: package.json references this incorrectly - should be ScheduleTrigger)
+- Build output goes to `dist/nodes/Timetable/TimetableTrigger.node.js`
 
 ### Trigger Node Pattern
 This implements the n8n trigger node pattern:

@@ -1,129 +1,85 @@
 import moment from 'moment-timezone';
-import { type CronExpression, randomInt } from 'n8n-workflow';
+import { randomInt } from 'n8n-workflow';
 
-import type { IRecurrenceRule, ScheduleInterval } from './SchedulerInterface';
+import type { TimetableConfig, NextSlotResult, NextRunTime } from './SchedulerInterface';
 
-export function recurrenceCheck(
-	recurrence: IRecurrenceRule,
-	recurrenceRules: number[],
-	timezone: string,
-): boolean {
-	if (!recurrence.activated) return true;
-
-	const intervalSize = recurrence.intervalSize;
-	if (!intervalSize) return false;
-
-	const index = recurrence.index;
-	const typeInterval = recurrence.typeInterval;
-	const lastExecution = recurrenceRules[index];
-
-	const momentTz = moment.tz(timezone);
-	if (typeInterval === 'hours') {
-		const hour = momentTz.hour();
-		if (lastExecution === undefined || hour === (intervalSize + lastExecution) % 24) {
-			recurrenceRules[index] = hour;
-			return true;
-		}
-	} else if (typeInterval === 'days') {
-		const dayOfYear = momentTz.dayOfYear();
-		if (lastExecution === undefined || dayOfYear === (intervalSize + lastExecution) % 365) {
-			recurrenceRules[index] = dayOfYear;
-			return true;
-		}
-	} else if (typeInterval === 'weeks') {
-		const week = momentTz.week();
-		if (
-			lastExecution === undefined || // First time executing this rule
-			week === (intervalSize + lastExecution) % 52 || // not first time, but minimum interval has passed
-			week === lastExecution // Trigger on multiple days in the same week
-		) {
-			recurrenceRules[index] = week;
-			return true;
-		}
-	} else if (typeInterval === 'months') {
-		const month = momentTz.month();
-		if (lastExecution === undefined || month === (intervalSize + lastExecution) % 12) {
-			recurrenceRules[index] = month;
-			return true;
+export function getNextSlotHour(now: Date, fixedHours: number[]): NextSlotResult {
+	const currentHour = now.getHours();
+	
+	for (const hour of fixedHours) {
+		if (currentHour < hour) {
+			return { hour, isTomorrow: false };
 		}
 	}
-	return false;
+
+	// All slots for today have passed, return first slot for tomorrow
+	return { hour: fixedHours[0], isTomorrow: true };
 }
 
-export const toCronExpression = (interval: ScheduleInterval): CronExpression => {
-	if (interval.field === 'cronExpression') return interval.expression;
-	if (interval.field === 'seconds') return `*/${interval.secondsInterval} * * * * *`;
-
-	const randomSecond = randomInt(0, 60);
-	if (interval.field === 'minutes') return `${randomSecond} */${interval.minutesInterval} * * * *`;
-
-	const minute = interval.triggerAtMinute ?? randomInt(0, 60);
-	if (interval.field === 'hours')
-		return `${randomSecond} ${minute} */${interval.hoursInterval} * * *`;
-
-	// Since Cron does not support `*/` for days or weeks, all following expressions trigger more often, but are then filtered by `recurrenceCheck`
-	const hour = interval.triggerAtHour ?? randomInt(0, 24);
-	if (interval.field === 'days') return `${randomSecond} ${minute} ${hour} * * *`;
-	if (interval.field === 'weeks') {
-		const days = interval.triggerAtDay;
-		const daysOfWeek = days.length === 0 ? '*' : days.join(',');
-		return `${randomSecond} ${minute} ${hour} * * ${daysOfWeek}` as CronExpression;
+export function getNextRunTime(now: Date, config: TimetableConfig): NextRunTime {
+	const { hour, isTomorrow } = getNextSlotHour(now, config.fixedHours);
+	
+	let minute = 0;
+	if (config.randomizeMinutes) {
+		const minMinute = config.minMinute ?? 0;
+		const maxMinute = config.maxMinute ?? 59;
+		minute = randomInt(minMinute, maxMinute + 1);
 	}
 
-	const dayOfMonth = interval.triggerAtDayOfMonth ?? randomInt(0, 31);
-	return `${randomSecond} ${minute} ${hour} ${dayOfMonth} */${interval.monthsInterval} *`;
-};
-
-export function intervalToRecurrence(interval: ScheduleInterval, index: number) {
-	let recurrence: IRecurrenceRule = { activated: false };
-
-	if (interval.field === 'hours') {
-		const { hoursInterval } = interval;
-		if (hoursInterval !== 1) {
-			recurrence = {
-				activated: true,
-				index,
-				intervalSize: hoursInterval,
-				typeInterval: 'hours',
-			};
-		}
+	const nextRun = new Date(now);
+	if (isTomorrow) {
+		nextRun.setDate(nextRun.getDate() + 1);
 	}
 
-	if (interval.field === 'days') {
-		const { daysInterval } = interval;
-		if (daysInterval !== 1) {
-			recurrence = {
-				activated: true,
-				index,
-				intervalSize: daysInterval,
-				typeInterval: 'days',
-			};
-		}
+	nextRun.setHours(hour, minute, 0, 0);
+	
+	return {
+		date: now,
+		candidate: nextRun
+	};
+}
+
+export function shouldTriggerAtTime(
+	currentTime: Date,
+	lastTriggerTime: number | undefined,
+	config: TimetableConfig
+): boolean {
+	const currentHour = currentTime.getHours();
+	
+	// Check if current hour is one of our fixed hours
+	if (!config.fixedHours.includes(currentHour)) {
+		return false;
 	}
 
-	if (interval.field === 'weeks') {
-		const { weeksInterval } = interval;
-		if (weeksInterval !== 1) {
-			recurrence = {
-				activated: true,
-				index,
-				intervalSize: weeksInterval,
-				typeInterval: 'weeks',
-			};
-		}
+	// If no previous trigger, allow this one
+	if (!lastTriggerTime) {
+		return true;
 	}
 
-	if (interval.field === 'months') {
-		const { monthsInterval } = interval;
-		if (monthsInterval !== 1) {
-			recurrence = {
-				activated: true,
-				index,
-				intervalSize: monthsInterval,
-				typeInterval: 'months',
-			};
-		}
+	const lastTrigger = new Date(lastTriggerTime);
+	const timeSinceLastTrigger = currentTime.getTime() - lastTrigger.getTime();
+	
+	// Prevent multiple triggers within the same hour
+	const oneHourMs = 60 * 60 * 1000;
+	if (timeSinceLastTrigger < oneHourMs && lastTrigger.getHours() === currentHour) {
+		return false;
 	}
 
-	return recurrence;
+	return true;
+}
+
+export function shouldTriggerNow(
+	lastTriggerTime: number | undefined,
+	config: TimetableConfig,
+	timezone: string
+): boolean {
+	const now = moment.tz(timezone).toDate();
+	return shouldTriggerAtTime(now, lastTriggerTime, config);
+}
+
+export function toCronExpression(config: TimetableConfig) {
+	// Create a cron expression that triggers every minute during fixed hours
+	// We'll use shouldTriggerNow() to filter out unwanted triggers
+	const hoursExpression = config.fixedHours.join(',');
+	return `0 * ${hoursExpression} * * *` as any; // Type assertion for n8n cron expression
 }
