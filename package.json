@@ -57,6 +57,6 @@
   },
   "dependencies": {
     "cron": "^4.3.3",
-    "moment-timezone": "0.5.37"
+    "moment-timezone": "0.6.0"
   }
 }
