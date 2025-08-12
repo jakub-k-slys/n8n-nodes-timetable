@@ -3,27 +3,48 @@ import { randomInt } from 'n8n-workflow';
 
 import type { TimetableConfig, NextSlotResult, NextRunTime } from './SchedulerInterface';
 
-export function getNextSlotHour(now: Date, fixedHours: number[]): NextSlotResult {
+export function getNextSlotHour(now: Date, config: TimetableConfig): NextSlotResult {
 	const currentHour = now.getHours();
 	
-	for (const hour of fixedHours) {
+	// Support both new hourConfigs and legacy fixedHours
+	const hours = config.hourConfigs ? 
+		config.hourConfigs.map(hc => hc.hour) : 
+		(config.fixedHours || []);
+	
+	for (const hour of hours) {
 		if (currentHour < hour) {
 			return { hour, isTomorrow: false };
 		}
 	}
 
 	// All slots for today have passed, return first slot for tomorrow
-	return { hour: fixedHours[0], isTomorrow: true };
+	return { hour: hours[0], isTomorrow: true };
 }
 
 export function getNextRunTime(now: Date, config: TimetableConfig): NextRunTime {
-	const { hour, isTomorrow } = getNextSlotHour(now, config.fixedHours);
+	const { hour, isTomorrow } = getNextSlotHour(now, config);
 	
 	let minute = 0;
-	if (config.randomizeMinutes) {
-		const minMinute = config.minMinute ?? 0;
-		const maxMinute = config.maxMinute ?? 59;
-		minute = randomInt(minMinute, maxMinute + 1);
+	
+	// Handle per-hour minute configuration
+	if (config.hourConfigs) {
+		const hourConfig = config.hourConfigs.find(hc => hc.hour === hour);
+		if (hourConfig) {
+			if (hourConfig.minuteMode === 'specific') {
+				minute = hourConfig.minute ?? 0;
+			} else {
+				const minMinute = hourConfig.minMinute ?? 0;
+				const maxMinute = hourConfig.maxMinute ?? 59;
+				minute = randomInt(minMinute, maxMinute + 1);
+			}
+		}
+	} else {
+		// Legacy support
+		if (config.randomizeMinutes) {
+			const minMinute = config.minMinute ?? 0;
+			const maxMinute = config.maxMinute ?? 59;
+			minute = randomInt(minMinute, maxMinute + 1);
+		}
 	}
 
 	const nextRun = new Date(now);
@@ -46,8 +67,12 @@ export function shouldTriggerAtTime(
 ): boolean {
 	const currentHour = currentTime.getHours();
 	
-	// Check if current hour is one of our fixed hours
-	if (!config.fixedHours.includes(currentHour)) {
+	// Check if current hour is one of our configured hours
+	const configuredHours = config.hourConfigs ? 
+		config.hourConfigs.map(hc => hc.hour) : 
+		(config.fixedHours || []);
+		
+	if (!configuredHours.includes(currentHour)) {
 		return false;
 	}
 
@@ -78,8 +103,11 @@ export function shouldTriggerNow(
 }
 
 export function toCronExpression(config: TimetableConfig) {
-	// Create a cron expression that triggers every minute during fixed hours
+	// Create a cron expression that triggers every minute during configured hours
 	// We'll use shouldTriggerNow() to filter out unwanted triggers
-	const hoursExpression = config.fixedHours.join(',');
+	const configuredHours = config.hourConfigs ? 
+		config.hourConfigs.map(hc => hc.hour) : 
+		(config.fixedHours || []);
+	const hoursExpression = configuredHours.join(',');
 	return `0 * ${hoursExpression} * * *` as any; // Type assertion for n8n cron expression
 }

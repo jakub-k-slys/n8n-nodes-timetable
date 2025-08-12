@@ -42,9 +42,9 @@ export class TimetableTrigger implements INodeType {
 				type: 'fixedCollection',
 				default: {
 					hours: [
-						{ hour: 12 },
-						{ hour: 16 },
-						{ hour: 21 }
+						{ hour: 12, minuteMode: 'random', minMinute: 0, maxMinute: 59 },
+						{ hour: 16, minuteMode: 'random', minMinute: 0, maxMinute: 59 },
+						{ hour: 21, minuteMode: 'random', minMinute: 0, maxMinute: 59 }
 					]
 				},
 				placeholder: 'Add trigger hours',
@@ -59,91 +59,190 @@ export class TimetableTrigger implements INodeType {
 						displayName: 'Hours',
 						values: [
 							{
-								displayName: 'Hour',
-								name: 'hour',
+						displayName: 'Hour',
+						name: 'hour',
+						type: 'options',
+						default: 12,
+						description: 'Hour when the workflow should trigger (24-hour format)',
+						options: [
+									{
+										name: '00:00 (Midnight)',
+										value: 0
+									},
+									{
+										name: '01:00',
+										value: 1
+									},
+									{
+										name: '02:00',
+										value: 2
+									},
+									{
+										name: '03:00',
+										value: 3
+									},
+									{
+										name: '04:00',
+										value: 4
+									},
+									{
+										name: '05:00',
+										value: 5
+									},
+									{
+										name: '06:00',
+										value: 6
+									},
+									{
+										name: '07:00',
+										value: 7
+									},
+									{
+										name: '08:00',
+										value: 8
+									},
+									{
+										name: '09:00',
+										value: 9
+									},
+									{
+										name: '10:00',
+										value: 10
+									},
+									{
+										name: '11:00',
+										value: 11
+									},
+									{
+										name: '12:00 (Noon)',
+										value: 12
+									},
+									{
+										name: '13:00',
+										value: 13
+									},
+									{
+										name: '14:00',
+										value: 14
+									},
+									{
+										name: '15:00',
+										value: 15
+									},
+									{
+										name: '16:00',
+										value: 16
+									},
+									{
+										name: '17:00',
+										value: 17
+									},
+									{
+										name: '18:00',
+										value: 18
+									},
+									{
+										name: '19:00',
+										value: 19
+									},
+									{
+										name: '20:00',
+										value: 20
+									},
+									{
+										name: '21:00',
+										value: 21
+									},
+									{
+										name: '22:00',
+										value: 22
+									},
+									{
+										name: '23:00',
+										value: 23
+									},
+								]
+							},
+							{
+								displayName: 'Max Random Minute',
+								name: 'maxMinute',
 								type: 'options',
-								default: 12,
-								description: 'Hour when the workflow should trigger (24-hour format)',
+								default: '',
+								description: 'Maximum minute for randomization',
+								displayOptions: {
+									show: {
+										minuteMode: ['random'],
+									},
+								},
+								options: Array.from({ length: 60 }, (_, i) => ({
+									name: i.toString().padStart(2, '0'),
+									value: i,
+								})),
+							},
+							{
+								displayName: 'Min Random Minute',
+								name: 'minMinute',
+								type: 'options',
+								default: '',
+								description: 'Minimum minute for randomization',
+								displayOptions: {
+									show: {
+										minuteMode: ['random'],
+									},
+								},
+								options: Array.from({ length: 60 }, (_, i) => ({
+									name: i.toString().padStart(2, '0'),
+									value: i,
+								})),
+							},
+							{
+								displayName: 'Minute Mode',
+								name: 'minuteMode',
+								type: 'options',
+								default: 'random',
+								description: 'How to determine the minute within this hour',
 								options: [
-									{ name: '00:00 (Midnight)', value: 0 },
-									{ name: '01:00', value: 1 },
-									{ name: '02:00', value: 2 },
-									{ name: '03:00', value: 3 },
-									{ name: '04:00', value: 4 },
-									{ name: '05:00', value: 5 },
-									{ name: '06:00', value: 6 },
-									{ name: '07:00', value: 7 },
-									{ name: '08:00', value: 8 },
-									{ name: '09:00', value: 9 },
-									{ name: '10:00', value: 10 },
-									{ name: '11:00', value: 11 },
-									{ name: '12:00 (Noon)', value: 12 },
-									{ name: '13:00', value: 13 },
-									{ name: '14:00', value: 14 },
-									{ name: '15:00', value: 15 },
-									{ name: '16:00', value: 16 },
-									{ name: '17:00', value: 17 },
-									{ name: '18:00', value: 18 },
-									{ name: '19:00', value: 19 },
-									{ name: '20:00', value: 20 },
-									{ name: '21:00', value: 21 },
-									{ name: '22:00', value: 22 },
-									{ name: '23:00', value: 23 },
+									{
+										name: 'Random (Within Range)',
+										value: 'random',
+									},
+									{
+										name: 'Specific Minute',
+										value: 'specific',
+									},
 								],
 							},
-						],
+							{
+								displayName: 'Specific Minute',
+								name: 'minute',
+								type: 'options',
+								default: '',
+								description: 'Exact minute when the workflow should trigger',
+								displayOptions: {
+									show: {
+										minuteMode: ['specific'],
+									},
+								},
+								options: Array.from({ length: 60 }, (_, i) => ({
+									name: i.toString().padStart(2, '0'),
+									value: i,
+								})),
+							},
+					],
 					},
 				],
-			},
-			{
-				displayName: 'Randomize Minutes',
-				name: 'randomizeMinutes',
-				type: 'boolean',
-				default: true,
-				description: 'Whether to randomize the minute within each hour',
-			},
-			{
-				displayName: 'Minimum Minute',
-				name: 'minMinute',
-				type: 'number',
-				default: 0,
-				typeOptions: {
-					minValue: 0,
-					maxValue: 59,
-				},
-				displayOptions: {
-					show: {
-						randomizeMinutes: [true],
-					},
-				},
-				description: 'Minimum minute for randomization (0-59)',
-			},
-			{
-				displayName: 'Maximum Minute',
-				name: 'maxMinute',
-				type: 'number',
-				default: 59,
-				typeOptions: {
-					minValue: 0,
-					maxValue: 59,
-				},
-				displayOptions: {
-					show: {
-						randomizeMinutes: [true],
-					},
-				},
-				description: 'Maximum minute for randomization (0-59)',
 			},
 		],
 	};
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		const triggerHoursData = this.getNodeParameter('triggerHours', {
-			hours: [{ hour: 12 }, { hour: 16 }, { hour: 21 }]
-		}) as { hours: Array<{ hour: number }> };
-		const randomizeMinutes = this.getNodeParameter('randomizeMinutes', true) as boolean;
-		const minMinute = this.getNodeParameter('minMinute', 0) as number;
-		const maxMinute = this.getNodeParameter('maxMinute', 59) as number;
+			hours: [
+				{ hour: 12, minuteMode: 'random', minMinute: 0, maxMinute: 59 },
+				{ hour: 16, minuteMode: 'random', minMinute: 0, maxMinute: 59 },
+				{ hour: 21, minuteMode: 'random', minMinute: 0, maxMinute: 59 }
+			]
+		}) as { hours: Array<{ hour: number; minuteMode: 'random' | 'specific'; minute?: number | string; minMinute?: number | string; maxMinute?: number | string }> };
 		
 		const timezone = this.getTimezone();
 		const staticData = this.getWorkflowStaticData('node') as {
@@ -151,7 +250,7 @@ export class TimetableTrigger implements INodeType {
 		};
 
 		// Parse and validate trigger hours
-		let fixedHours: number[];
+		let hourConfigs: Array<{ hour: number; minuteMode: 'random' | 'specific'; minute?: number; minMinute?: number; maxMinute?: number }>;
 		try {
 			if (!triggerHoursData.hours || !Array.isArray(triggerHoursData.hours)) {
 				throw new NodeOperationError(
@@ -160,12 +259,34 @@ export class TimetableTrigger implements INodeType {
 				);
 			}
 
-			fixedHours = triggerHoursData.hours
-				.map(item => item.hour)
-				.filter(h => typeof h === 'number' && h >= 0 && h <= 23)
-				.sort((a, b) => a - b);
+			hourConfigs = triggerHoursData.hours
+				.filter(item => typeof item.hour === 'number' && item.hour >= 0 && item.hour <= 23)
+				.map(item => {
+					// Validate minute configuration for each hour
+					if (item.minuteMode === 'random') {
+						const minMinute = (item.minMinute === '' || item.minMinute === undefined) ? 0 : Number(item.minMinute);
+						const maxMinute = (item.maxMinute === '' || item.maxMinute === undefined) ? 59 : Number(item.maxMinute);
+						if (minMinute > maxMinute) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Invalid minute range for hour ${item.hour}: min (${minMinute}) cannot be greater than max (${maxMinute})`
+							);
+						}
+						return { hour: item.hour, minuteMode: item.minuteMode, minMinute, maxMinute };
+					} else {
+						const minute = (item.minute === '' || item.minute === undefined) ? 0 : Number(item.minute);
+						if (minute < 0 || minute > 59) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Invalid specific minute for hour ${item.hour}: ${minute} (must be 0-59)`
+							);
+						}
+						return { hour: item.hour, minuteMode: item.minuteMode, minute };
+					}
+				})
+				.sort((a, b) => a.hour - b.hour);
 				
-			if (fixedHours.length === 0) {
+			if (hourConfigs.length === 0) {
 				throw new NodeOperationError(
 					this.getNode(),
 					'At least one valid hour must be selected'
@@ -181,19 +302,14 @@ export class TimetableTrigger implements INodeType {
 			);
 		}
 
-		// Validate minute range
-		if (randomizeMinutes && minMinute > maxMinute) {
-			throw new NodeOperationError(
-				this.getNode(),
-				'Minimum minute cannot be greater than maximum minute',
-			);
-		}
-
 		const config: TimetableConfig = {
-			fixedHours,
-			randomizeMinutes,
-			minMinute: randomizeMinutes ? minMinute : undefined,
-			maxMinute: randomizeMinutes ? maxMinute : undefined,
+			hourConfigs: hourConfigs.map(item => ({
+				hour: item.hour,
+				minuteMode: item.minuteMode,
+				minute: item.minute,
+				minMinute: item.minMinute,
+				maxMinute: item.maxMinute
+			}))
 		};
 
 		const executeTrigger = () => {
@@ -217,9 +333,12 @@ export class TimetableTrigger implements INodeType {
 				Minute: momentTz.format('mm'),
 				Second: momentTz.format('ss'),
 				Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
-				'Fixed hours': fixedHours,
+				'Trigger hours': hourConfigs.map(hc => ({
+					hour: hc.hour,
+					minuteMode: hc.minuteMode,
+					...(hc.minuteMode === 'specific' ? { minute: hc.minute } : { minMinute: hc.minMinute, maxMinute: hc.maxMinute })
+				})),
 				'Next scheduled': nextRun.candidate.toISOString(),
-				'Randomize minutes': randomizeMinutes,
 			};
 
 			this.emit([this.helpers.returnJsonArray([resultData])]);
