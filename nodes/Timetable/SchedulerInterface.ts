@@ -1,6 +1,16 @@
+export interface HourConfig {
+	hour: number;
+	minuteMode: 'random' | 'specific';
+	minute?: number;
+	minMinute?: number;
+	maxMinute?: number;
+}
+
 export interface TimetableConfig {
-	fixedHours: number[];
-	randomizeMinutes: boolean;
+	hourConfigs: HourConfig[];
+	// Legacy fields for backward compatibility
+	fixedHours?: number[];
+	randomizeMinutes?: boolean;
 	minMinute?: number;
 	maxMinute?: number;
 }
