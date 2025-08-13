@@ -22,9 +22,12 @@ import type { TimetableConfig } from '../../nodes/Timetable/SchedulerInterface';
 describe('getNextSlotHour', () => {
 	it('should return next available slot within the same day', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const fixedHours = [12, 16, 21];
+		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
+			fixedHours: [12, 16, 21]
+		};
 		
-		const result = getNextSlotHour(now, fixedHours);
+		const result = getNextSlotHour(now, config);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -34,9 +37,12 @@ describe('getNextSlotHour', () => {
 
 	it('should return next available slot later in the day', () => {
 		const now = new Date('2024-01-01T14:00:00Z');
-		const fixedHours = [12, 16, 21];
+		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
+			fixedHours: [12, 16, 21]
+		};
 		
-		const result = getNextSlotHour(now, fixedHours);
+		const result = getNextSlotHour(now, config);
 		
 		expect(result).toEqual({
 			hour: 16,
@@ -46,9 +52,12 @@ describe('getNextSlotHour', () => {
 
 	it('should return first slot of tomorrow when all today slots have passed', () => {
 		const now = new Date('2024-01-01T22:00:00Z');
-		const fixedHours = [12, 16, 21];
+		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
+			fixedHours: [12, 16, 21]
+		};
 		
-		const result = getNextSlotHour(now, fixedHours);
+		const result = getNextSlotHour(now, config);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -58,9 +67,12 @@ describe('getNextSlotHour', () => {
 
 	it('should handle single fixed hour', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const fixedHours = [15];
+		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
+			fixedHours: [15]
+		};
 		
-		const result = getNextSlotHour(now, fixedHours);
+		const result = getNextSlotHour(now, config);
 		
 		expect(result).toEqual({
 			hour: 15,
@@ -81,6 +93,7 @@ describe('getNextRunTime', () => {
 	it('should return next run time without randomization', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [12, 16, 21],
 			randomizeMinutes: false
 		};
@@ -95,6 +108,7 @@ describe('getNextRunTime', () => {
 	it('should return next run time with randomization', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [12, 16, 21],
 			randomizeMinutes: true,
 			minMinute: 0,
@@ -111,6 +125,7 @@ describe('getNextRunTime', () => {
 	it('should return next run time for tomorrow', () => {
 		const now = new Date('2024-01-01T22:00:00Z');
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [12, 16, 21],
 			randomizeMinutes: false
 		};
@@ -128,6 +143,7 @@ describe('getNextRunTime', () => {
 		
 		const now = new Date('2024-01-01T10:00:00Z');
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [12, 16, 21],
 			randomizeMinutes: true,
 			minMinute: 30,
@@ -144,6 +160,7 @@ describe('shouldTriggerAtTime', () => {
 	it('should return false when current hour is not in fixed hours', () => {
 		const currentTime = new Date('2024-01-01T10:30:00Z'); // 10:30 AM
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [16, 21], // 4pm, 9pm - doesn't include 10am
 			randomizeMinutes: true
 		};
@@ -157,6 +174,7 @@ describe('shouldTriggerAtTime', () => {
 		const currentTime = new Date('2024-01-01T12:30:00Z'); // This will be hour 13 in my timezone
 		const actualHour = currentTime.getHours();
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [actualHour], // Use the actual hour that JS will interpret
 			randomizeMinutes: true
 		};
@@ -170,6 +188,7 @@ describe('shouldTriggerAtTime', () => {
 		const currentTime = new Date('2024-01-01T12:30:00Z');
 		const actualHour = currentTime.getHours();
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [actualHour], // Use actual hour
 			randomizeMinutes: true
 		};
@@ -186,6 +205,7 @@ describe('shouldTriggerAtTime', () => {
 		const currentTime = new Date('2024-01-01T12:30:00Z');
 		const actualHour = currentTime.getHours();
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [actualHour], // Use actual hour
 			randomizeMinutes: true
 		};
@@ -202,6 +222,7 @@ describe('shouldTriggerAtTime', () => {
 		const currentTime = new Date('2024-01-01T16:10:00Z');
 		const actualCurrentHour = currentTime.getHours();
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [actualCurrentHour], // Use actual current hour
 			randomizeMinutes: true
 		};
@@ -220,6 +241,7 @@ describe('shouldTriggerAtTime', () => {
 describe('toCronExpression', () => {
 	it('should generate cron expression for fixed hours', () => {
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [12, 16, 21],
 			randomizeMinutes: true
 		};
@@ -231,6 +253,7 @@ describe('toCronExpression', () => {
 
 	it('should generate cron expression for single hour', () => {
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [15],
 			randomizeMinutes: false
 		};
@@ -242,6 +265,7 @@ describe('toCronExpression', () => {
 
 	it('should generate cron expression for multiple unsorted hours', () => {
 		const config: TimetableConfig = {
+			hourConfigs: undefined as any,
 			fixedHours: [21, 9, 15, 6],
 			randomizeMinutes: true
 		};
