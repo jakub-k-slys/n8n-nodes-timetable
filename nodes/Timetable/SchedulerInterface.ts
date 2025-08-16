@@ -1,9 +1,12 @@
+export type DayOfWeek = 'ALL' | 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+
 export interface HourConfig {
 	hour: number;
 	minuteMode: 'random' | 'specific';
 	minute?: number;
 	minMinute?: number;
 	maxMinute?: number;
+	dayOfWeek?: DayOfWeek; // Optional for backward compatibility
 }
 
 export interface TimetableConfig {
