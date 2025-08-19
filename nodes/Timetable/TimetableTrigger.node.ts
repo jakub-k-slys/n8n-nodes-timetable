@@ -42,9 +42,7 @@ export class TimetableTrigger implements INodeType {
 				type: 'fixedCollection',
 				default: {
 					hours: [
-						{ hour: 12, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' },
-						{ hour: 16, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' },
-						{ hour: 21, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' }
+						{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
 					]
 				},
 				placeholder: 'Add trigger hours',
@@ -205,42 +203,21 @@ export class TimetableTrigger implements INodeType {
 					]
 							},
 							{
-						displayName: 'Max Random Minute',
-						name: 'maxMinute',
-						type: 'options',
-						default: '',
-						description: 'Maximum minute for randomization',
-							},
-							{
-						displayName: 'Min Random Minute',
-						name: 'minMinute',
-						type: 'options',
-						default: '',
-						description: 'Minimum minute for randomization',
-							},
-							{
-						displayName: 'Minute Mode',
-						name: 'minuteMode',
-						type: 'options',
-						default: 'random',
-						description: 'How to determine the minute within this hour',
-						options: [
+								displayName: 'Minute',
+								name: 'minute',
+								type: 'options',
+								default: 'random',
+								description: 'Select specific minute or random',
+								options: [
 									{
-										name: 'Random (Within Range)',
+										name: 'Random',
 										value: 'random',
 									},
-									{
-										name: 'Specific Minute',
-										value: 'specific',
-									},
-					]
-							},
-							{
-						displayName: 'Specific Minute',
-						name: 'minute',
-						type: 'options',
-						default: '',
-						description: 'Exact minute when the workflow should trigger',
+									...Array.from({ length: 60 }, (_, i) => ({
+										name: i.toString().padStart(2, '0'),
+										value: i.toString(),
+									})),
+								],
 							},
 					],
 					},
@@ -252,11 +229,9 @@ export class TimetableTrigger implements INodeType {
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		const triggerHoursData = this.getNodeParameter('triggerHours', {
 			hours: [
-				{ hour: 12, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' },
-				{ hour: 16, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' },
-				{ hour: 21, minuteMode: 'random', minMinute: 0, maxMinute: 59, dayOfWeek: 'ALL' }
+				{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
 			]
-		}) as { hours: Array<{ hour: number; minuteMode: 'random' | 'specific'; minute?: number | string; minMinute?: number | string; maxMinute?: number | string; dayOfWeek?: string }> };
+		}) as { hours: Array<{ hour: number; minute: string; dayOfWeek?: string }> };
 		
 		const timezone = this.getTimezone();
 		const staticData = this.getWorkflowStaticData('node') as {
@@ -264,7 +239,7 @@ export class TimetableTrigger implements INodeType {
 		};
 
 		// Parse and validate trigger hours
-		let hourConfigs: Array<{ hour: number; minuteMode: 'random' | 'specific'; minute?: number; minMinute?: number; maxMinute?: number; dayOfWeek?: string }>;
+		let hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>;
 		try {
 			if (!triggerHoursData.hours || !Array.isArray(triggerHoursData.hours)) {
 				throw new NodeOperationError(
@@ -286,27 +261,19 @@ export class TimetableTrigger implements INodeType {
 						);
 					}
 
-					// Validate minute configuration for each hour
-					if (item.minuteMode === 'random') {
-						const minMinute = (item.minMinute === '' || item.minMinute === undefined) ? 0 : Number(item.minMinute);
-						const maxMinute = (item.maxMinute === '' || item.maxMinute === undefined) ? 59 : Number(item.maxMinute);
-						if (minMinute > maxMinute) {
+					// Validate minute configuration
+					const minute = item.minute || 'random';
+					if (minute !== 'random') {
+						const minuteNum = Number(minute);
+						if (isNaN(minuteNum) || minuteNum < 0 || minuteNum > 59) {
 							throw new NodeOperationError(
 								this.getNode(),
-								`Invalid minute range for hour ${item.hour}: min (${minMinute}) cannot be greater than max (${maxMinute})`
+								`Invalid minute for hour ${item.hour}: ${minute} (must be 'random' or 0-59)`
 							);
 						}
-						return { hour: item.hour, minuteMode: item.minuteMode, minMinute, maxMinute, dayOfWeek };
-					} else {
-						const minute = (item.minute === '' || item.minute === undefined) ? 0 : Number(item.minute);
-						if (minute < 0 || minute > 59) {
-							throw new NodeOperationError(
-								this.getNode(),
-								`Invalid specific minute for hour ${item.hour}: ${minute} (must be 0-59)`
-							);
-						}
-						return { hour: item.hour, minuteMode: item.minuteMode, minute, dayOfWeek };
 					}
+
+					return { hour: item.hour, minute, dayOfWeek };
 				})
 				.sort((a, b) => a.hour - b.hour);
 				
@@ -329,10 +296,10 @@ export class TimetableTrigger implements INodeType {
 		const config: TimetableConfig = {
 			hourConfigs: hourConfigs.map(item => ({
 				hour: item.hour,
-				minuteMode: item.minuteMode,
-				minute: item.minute,
-				minMinute: item.minMinute,
-				maxMinute: item.maxMinute,
+				minute: item.minute === 'random' ? undefined : Number(item.minute),
+				minuteMode: item.minute === 'random' ? 'random' : 'specific',
+				minMinute: item.minute === 'random' ? 0 : undefined,
+				maxMinute: item.minute === 'random' ? 59 : undefined,
 				dayOfWeek: item.dayOfWeek as any
 			}))
 		};
@@ -360,9 +327,8 @@ export class TimetableTrigger implements INodeType {
 				Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
 				'Trigger hours': hourConfigs.map(hc => ({
 					hour: hc.hour,
-					minuteMode: hc.minuteMode,
-					dayOfWeek: hc.dayOfWeek,
-					...(hc.minuteMode === 'specific' ? { minute: hc.minute } : { minMinute: hc.minMinute, maxMinute: hc.maxMinute })
+					minute: hc.minute,
+					dayOfWeek: hc.dayOfWeek
 				})),
 				'Next scheduled': nextRun.candidate.toISOString(),
 			};
