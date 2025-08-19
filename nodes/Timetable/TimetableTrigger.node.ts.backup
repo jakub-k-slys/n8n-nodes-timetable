@@ -70,24 +70,8 @@ export class TimetableTrigger implements INodeType {
 										value: 'ALL',
 									},
 									{
-										name: 'Friday',
-										value: 'FRI',
-									},
-									{
 										name: 'Monday',
 										value: 'MON',
-									},
-									{
-										name: 'Saturday',
-										value: 'SAT',
-									},
-									{
-										name: 'Sunday',
-										value: 'SUN',
-									},
-									{
-										name: 'Thursday',
-										value: 'THU',
 									},
 									{
 										name: 'Tuesday',
@@ -97,7 +81,23 @@ export class TimetableTrigger implements INodeType {
 										name: 'Wednesday',
 										value: 'WED',
 									},
-																]
+									{
+										name: 'Thursday',
+										value: 'THU',
+									},
+									{
+										name: 'Friday',
+										value: 'FRI',
+									},
+									{
+										name: 'Saturday',
+										value: 'SAT',
+									},
+									{
+										name: 'Sunday',
+										value: 'SUN',
+									},
+								]
 							},
 							{
 						displayName: 'Hour',
