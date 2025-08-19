@@ -14,7 +14,7 @@ export class TimetableTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Timetable Trigger',
 		name: 'timetableTrigger',
-		icon: 'fa:clock',
+		icon: 'file:timetableTrigger.svg',
 		group: ['trigger', 'schedule'],
 		version: [1],
 		description: 'Triggers the workflow at user-defined hours with optional minute randomization',
@@ -23,7 +23,6 @@ export class TimetableTrigger implements INodeType {
 			'Your timetable trigger will now trigger executions at the hours you have selected.',
 		defaults: {
 			name: 'Timetable Trigger',
-			color: '#31C49F',
 		},
 
 		inputs: [],
