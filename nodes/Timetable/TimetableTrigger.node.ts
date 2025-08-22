@@ -81,25 +81,46 @@ function createExecuteTrigger(
 	helpers: any
 ) {
 	return () => {
-		const currentTime = moment.tz(timezone).toDate();
-		const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
-		
-		TimetableLogger.logTriggerCheck(currentTime, timezone, staticData.lastTriggerTime, shouldTrigger);
-		
-		if (!shouldTrigger) {
-			const nextRun = getNextRunTime(currentTime, config);
-			TimetableLogger.logSkipTrigger(nextRun.candidate);
-			return;
+		try {
+			const currentTime = moment.tz(timezone).toDate();
+			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
+			
+			TimetableLogger.logTriggerCheck(currentTime, timezone, staticData.lastTriggerTime, shouldTrigger);
+			
+			if (!shouldTrigger) {
+				try {
+					const nextRun = getNextRunTime(currentTime, config);
+					TimetableLogger.logSkipTrigger(nextRun.candidate);
+				} catch (error) {
+					TimetableLogger.logError('computing next run time for skip', error instanceof Error ? error : 'Unknown error');
+				}
+				return;
+			}
+
+			TimetableLogger.logExecution('automatic', currentTime);
+			staticData.lastTriggerTime = Date.now();
+			
+			try {
+				const momentTz = moment.tz(timezone);
+				const nextRun = getNextRunTime(momentTz.toDate(), config);
+				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
+				emit([helpers.returnJsonArray([resultData])]);
+			} catch (error) {
+				TimetableLogger.logError('creating workflow output', error instanceof Error ? error : 'Unknown error');
+				// Emit minimal data without next run time to ensure workflow still executes
+				const momentTz = moment.tz(timezone);
+				const fallbackData = { 
+					timestamp: momentTz.toISOString(true),
+					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+					'Readable time': momentTz.format('h:mm:ss a'),
+					'Manual execution': false,
+					error: 'Failed to compute next run time - workflow executed with fallback data'
+				};
+				emit([helpers.returnJsonArray([fallbackData])]);
+			}
+		} catch (error) {
+			TimetableLogger.logError('in execution trigger', error instanceof Error ? error : 'Unknown error');
 		}
-
-		TimetableLogger.logExecution('automatic', currentTime);
-		staticData.lastTriggerTime = Date.now();
-		
-		const momentTz = moment.tz(timezone);
-		const nextRun = getNextRunTime(momentTz.toDate(), config);
-		const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
-
-		emit([helpers.returnJsonArray([resultData])]);
 	};
 }
 
@@ -112,15 +133,32 @@ function createManualTrigger(
 	helpers: any
 ) {
 	return async () => {
-		const momentTz = moment.tz(timezone);
-		
-		TimetableLogger.logExecution('manual', momentTz.toDate(), timezone);
-		
-		const nextRun = getNextRunTime(momentTz.toDate(), config);
-		TimetableLogger.logNextScheduled(nextRun.candidate);
-		
-		const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, true);
-		emit([helpers.returnJsonArray([resultData])]);
+		try {
+			const momentTz = moment.tz(timezone);
+			
+			TimetableLogger.logExecution('manual', momentTz.toDate(), timezone);
+			
+			try {
+				const nextRun = getNextRunTime(momentTz.toDate(), config);
+				TimetableLogger.logNextScheduled(nextRun.candidate);
+				
+				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, true);
+				emit([helpers.returnJsonArray([resultData])]);
+			} catch (error) {
+				TimetableLogger.logError('computing next run time for manual execution', error instanceof Error ? error : 'Unknown error');
+				// Emit minimal data without next run time for manual execution
+				const fallbackData = { 
+					timestamp: momentTz.toISOString(true),
+					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+					'Readable time': momentTz.format('h:mm:ss a'),
+					'Manual execution': true,
+					error: 'Failed to compute next run time - manual execution completed with fallback data'
+				};
+				emit([helpers.returnJsonArray([fallbackData])]);
+			}
+		} catch (error) {
+			TimetableLogger.logError('in manual trigger', error instanceof Error ? error : 'Unknown error');
+		}
 	};
 }
 
@@ -307,7 +345,7 @@ export class TimetableTrigger implements INodeType {
 		if (this.getMode() !== 'manual') {
 			try {
 				TimetableLogger.logCronRegistration();
-				this.helpers.registerCron('* * * * *' as any, executeTrigger);
+				this.helpers.registerCron('* * * * * *' as any, executeTrigger);
 			} catch (error) {
 				throw new NodeOperationError(
 					this.getNode(),
