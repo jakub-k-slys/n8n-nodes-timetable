@@ -116,52 +116,6 @@ function createExecuteTrigger(
 	};
 }
 
-// Create the manual trigger function
-function createManualTrigger(
-	config: TimetableConfig,
-	timezone: string, 
-	hourConfigs: RawHourConfig[],
-	helpers: NodeHelpers
-) {
-	return async () => {
-		try {
-			const momentTz = moment.tz(timezone);
-			
-			TimetableLogger.logExecution('manual', momentTz.toDate(), timezone);
-			
-			try {
-				const nextRun = getNextRunTime(momentTz.toDate(), config);
-				TimetableLogger.logNextScheduled(nextRun.candidate);
-				
-				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, true);
-				return helpers.returnJsonArray([resultData]);
-			} catch (error) {
-				TimetableLogger.logError('computing next run time for manual execution', error instanceof Error ? error : 'Unknown error');
-				// Return minimal data without next run time for manual execution
-				const fallbackData = { 
-					timestamp: momentTz.toISOString(true),
-					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
-					'Readable time': momentTz.format('h:mm:ss a'),
-					'Manual execution': true,
-					error: 'Failed to compute next run time - manual execution completed with fallback data'
-				};
-				return helpers.returnJsonArray([fallbackData]);
-			}
-		} catch (error) {
-			TimetableLogger.logError('in manual trigger', error instanceof Error ? error : 'Unknown error');
-			// Return fallback data on error
-			const momentTz = moment.tz(timezone);
-			const fallbackData = { 
-				timestamp: momentTz.toISOString(true),
-				'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
-				'Readable time': momentTz.format('h:mm:ss a'),
-				'Manual execution': true,
-				error: 'Manual trigger execution failed'
-			};
-			return helpers.returnJsonArray([fallbackData]);
-		}
-	};
-}
 
 export class TimetableTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -282,6 +236,39 @@ export class TimetableTrigger implements INodeType {
 	};
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
+		// Handle manual execution immediately without any configuration processing
+		if (this.getMode() === 'manual') {
+			const timezone = this.getTimezone();
+			const momentTz = moment.tz(timezone);
+			
+			TimetableLogger.logExecution('manual', momentTz.toDate(), timezone);
+			
+			// Return simple manual execution data immediately
+			const manualTriggerFunction = () => {
+				const resultData = {
+					timestamp: momentTz.toISOString(true),
+					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+					'Readable time': momentTz.format('h:mm:ss a'),
+					'Manual execution': true,
+					year: momentTz.year(),
+					month: momentTz.month() + 1,
+					day: momentTz.date(),
+					hour: momentTz.hour(),
+					minute: momentTz.minute(),
+					second: momentTz.second(),
+					dayOfWeek: momentTz.day(),
+					weekday: momentTz.format('dddd'),
+					timezone: timezone,
+				};
+				
+				this.emit([this.helpers.returnJsonArray([resultData])]);
+				return Promise.resolve();
+			};
+
+			return { manualTriggerFunction };
+		}
+
+		// Regular trigger mode processing
 		const triggerHoursData = this.getNodeParameter('triggerHours', {
 			hours: [
 				{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
@@ -341,26 +328,15 @@ export class TimetableTrigger implements INodeType {
 			this.helpers
 		);
 
-		if (this.getMode() !== 'manual') {
-			try {
-				TimetableLogger.logCronRegistration();
-				this.helpers.registerCron('* * * * * *' as any, executeTrigger);
-			} catch (error) {
-				throw new NodeOperationError(
-					this.getNode(),
-					`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
-				);
-			}
-			return {};
-		} else {
-			const manualTriggerFunction = createManualTrigger(
-				config,
-				timezone, 
-				hourConfigs,
-				this.helpers
+		try {
+			TimetableLogger.logCronRegistration();
+			this.helpers.registerCron('* * * * * *' as any, executeTrigger);
+		} catch (error) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
 			);
-
-			return { manualTriggerFunction };
 		}
+		return {};
 	}
 }
