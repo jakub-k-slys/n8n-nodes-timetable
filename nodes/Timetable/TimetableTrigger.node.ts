@@ -8,7 +8,17 @@ import type {
 import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
 import { shouldTriggerNow, getNextRunTime, createResultData, TimetableLogger } from './GenericFunctions';
-import type { TimetableConfig } from './SchedulerInterface';
+import type { 
+	TimetableConfig, 
+	RawHourConfig, 
+	RawTriggerHoursData,
+	StaticData,
+	EmitFunction,
+	NodeHelpers
+} from './SchedulerInterface';
+import { RawTriggerHoursDataCodec } from './SchedulerInterface';
+import { isRight } from 'fp-ts/lib/Either';
+import { PathReporter } from 'io-ts/lib/PathReporter';
 
 // Generate hour options dynamically instead of hardcoding 98 lines
 function generateHourOptions() {
@@ -20,65 +30,48 @@ function generateHourOptions() {
 	}));
 }
 
-// Parse and validate trigger configuration
+// Parse and validate trigger configuration using io-ts
 function parseAndValidateConfig(
-	triggerHoursData: any,
+	triggerHoursData: unknown,
 	getNode: () => any
-): Array<{ hour: number; minute: string; dayOfWeek?: string }> {
-	if (!triggerHoursData.hours || !Array.isArray(triggerHoursData.hours)) {
+): RawHourConfig[] {
+	const validation = RawTriggerHoursDataCodec.decode(triggerHoursData);
+	
+	if (!isRight(validation)) {
+		const errors = PathReporter.report(validation).join('; ');
 		throw new NodeOperationError(
 			getNode(),
-			'Invalid trigger hours configuration'
+			`Invalid trigger configuration: ${errors}`,
+			{
+				description: 'Please check your hour selections, minute values (must be "random" or 0-59), and day of week settings'
+			}
 		);
 	}
 
-	const hourConfigs = triggerHoursData.hours
-		.filter((item: any) => typeof item.hour === 'number' && item.hour >= 0 && item.hour <= 23)
-		.map((item: any) => {
-			// Validate day of week
-			const dayOfWeek = item.dayOfWeek || 'ALL';
-			const validDays = ['ALL', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-			if (!validDays.includes(dayOfWeek)) {
-				throw new NodeOperationError(
-					getNode(),
-					`Invalid day of week for hour ${item.hour}: ${dayOfWeek} (must be one of: ${validDays.join(', ')})`
-				);
-			}
-
-			// Validate minute configuration
-			const minute = item.minute || 'random';
-			if (minute !== 'random') {
-				const minuteNum = Number(minute);
-				if (isNaN(minuteNum) || minuteNum < 0 || minuteNum > 59) {
-					throw new NodeOperationError(
-						getNode(),
-						`Invalid minute for hour ${item.hour}: ${minute} (must be 'random' or 0-59)`
-					);
-				}
-			}
-
-			return { hour: item.hour, minute, dayOfWeek };
-		})
-		.sort((a: any, b: any) => a.hour - b.hour);
-		
-	if (hourConfigs.length === 0) {
+	const { hours } = validation.right;
+	
+	if (hours.length === 0) {
 		throw new NodeOperationError(
 			getNode(),
-			'At least one valid hour must be selected'
+			'At least one valid hour must be selected',
+			{
+				description: 'Please add at least one trigger hour using the dropdown menu'
+			}
 		);
 	}
 
-	return hourConfigs;
+	// Sort by hour for consistent ordering
+	return hours.sort((a, b) => a.hour - b.hour);
 }
 
 // Create the execution trigger function
 function createExecuteTrigger(
 	config: TimetableConfig, 
 	timezone: string, 
-	staticData: { lastTriggerTime?: number }, 
-	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
-	emit: (data: any) => void,
-	helpers: any
+	staticData: StaticData, 
+	hourConfigs: RawHourConfig[],
+	emit: EmitFunction,
+	helpers: NodeHelpers
 ) {
 	return () => {
 		try {
@@ -128,9 +121,9 @@ function createExecuteTrigger(
 function createManualTrigger(
 	config: TimetableConfig,
 	timezone: string, 
-	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
-	emit: (data: any) => void,
-	helpers: any
+	hourConfigs: RawHourConfig[],
+	emit: EmitFunction,
+	helpers: NodeHelpers
 ) {
 	return async () => {
 		try {
@@ -285,15 +278,13 @@ export class TimetableTrigger implements INodeType {
 			hours: [
 				{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
 			]
-		}) as { hours: Array<{ hour: number; minute: string; dayOfWeek?: string }> };
+		}) as RawTriggerHoursData;
 		
 		const timezone = this.getTimezone();
-		const staticData = this.getWorkflowStaticData('node') as {
-			lastTriggerTime?: number;
-		};
+		const staticData = this.getWorkflowStaticData('node') as StaticData;
 
 		// Parse and validate trigger hours
-		let hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>;
+		let hourConfigs: RawHourConfig[];
 		try {
 			hourConfigs = parseAndValidateConfig(triggerHoursData, this.getNode.bind(this));
 		} catch (error) {
