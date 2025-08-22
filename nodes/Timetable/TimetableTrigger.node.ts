@@ -13,7 +13,6 @@ import type {
 	RawHourConfig, 
 	RawTriggerHoursData,
 	StaticData,
-	EmitFunction,
 	NodeHelpers
 } from './SchedulerInterface';
 import { RawTriggerHoursDataCodec } from './SchedulerInterface';
@@ -70,7 +69,7 @@ function createExecuteTrigger(
 	timezone: string, 
 	staticData: StaticData, 
 	hourConfigs: RawHourConfig[],
-	emit: EmitFunction,
+	emit: (data: any) => void,
 	helpers: NodeHelpers
 ) {
 	return () => {
@@ -122,7 +121,6 @@ function createManualTrigger(
 	config: TimetableConfig,
 	timezone: string, 
 	hourConfigs: RawHourConfig[],
-	emit: EmitFunction,
 	helpers: NodeHelpers
 ) {
 	return async () => {
@@ -136,10 +134,10 @@ function createManualTrigger(
 				TimetableLogger.logNextScheduled(nextRun.candidate);
 				
 				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, true);
-				emit([helpers.returnJsonArray([resultData])]);
+				return helpers.returnJsonArray([resultData]);
 			} catch (error) {
 				TimetableLogger.logError('computing next run time for manual execution', error instanceof Error ? error : 'Unknown error');
-				// Emit minimal data without next run time for manual execution
+				// Return minimal data without next run time for manual execution
 				const fallbackData = { 
 					timestamp: momentTz.toISOString(true),
 					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
@@ -147,10 +145,20 @@ function createManualTrigger(
 					'Manual execution': true,
 					error: 'Failed to compute next run time - manual execution completed with fallback data'
 				};
-				emit([helpers.returnJsonArray([fallbackData])]);
+				return helpers.returnJsonArray([fallbackData]);
 			}
 		} catch (error) {
 			TimetableLogger.logError('in manual trigger', error instanceof Error ? error : 'Unknown error');
+			// Return fallback data on error
+			const momentTz = moment.tz(timezone);
+			const fallbackData = { 
+				timestamp: momentTz.toISOString(true),
+				'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+				'Readable time': momentTz.format('h:mm:ss a'),
+				'Manual execution': true,
+				error: 'Manual trigger execution failed'
+			};
+			return helpers.returnJsonArray([fallbackData]);
 		}
 	};
 }
@@ -349,7 +357,6 @@ export class TimetableTrigger implements INodeType {
 				config,
 				timezone, 
 				hourConfigs,
-				this.emit.bind(this),
 				this.helpers
 			);
 
