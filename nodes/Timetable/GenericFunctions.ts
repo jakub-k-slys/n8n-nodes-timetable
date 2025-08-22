@@ -248,41 +248,83 @@ export function shouldTriggerNow(
 	return shouldTriggerAtTime(now, lastTriggerTime, config);
 }
 
-export function toCronExpression(config: TimetableConfig) {
-	// Create a cron expression that triggers every minute during configured hours and days
-	// We'll use shouldTriggerNow() to filter out unwanted triggers
-	
-	if (config.hourConfigs && config.hourConfigs.length > 0) {
-		// Group configs by day to create more efficient cron expressions
-		const dayGroups = new Map<string, number[]>();
+// Centralized logging service for consistent debug output
+export class TimetableLogger {
+	private static formatTime(time: Date): string {
+		return moment.utc(time).format('YYYY-MM-DD HH:mm:ss');
+	}
+
+	static logConfiguration(timezone: string, configs: any[], nextRun?: Date) {
+		console.log(`[TimetableTrigger] Configuration loaded at ${new Date().toISOString()}:`);
+		console.log(`[TimetableTrigger] Timezone: ${timezone}`);
+		console.log(`[TimetableTrigger] Hour configs:`, configs);
 		
-		for (const hc of config.hourConfigs) {
-			const dayKey = hc.dayOfWeek || 'ALL';
-			if (!dayGroups.has(dayKey)) {
-				dayGroups.set(dayKey, []);
-			}
-			dayGroups.get(dayKey)!.push(hc.hour);
+		if (nextRun) {
+			console.log(`[TimetableTrigger] Next scheduled trigger: ${nextRun.toISOString()} (${this.formatTime(nextRun)} UTC)`);
 		}
+	}
+
+	static logCronRegistration() {
+		console.log(`[TimetableTrigger] Registering cron job to run every minute for condition checking`);
+	}
+
+	static logTriggerCheck(currentTime: Date, timezone: string, lastTriggerTime: number | undefined, shouldTrigger: boolean) {
+		const currentTimeUtc = moment.utc(currentTime);
+		console.log(`[TimetableTrigger] Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
+		console.log(`[TimetableTrigger] Current time in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
+		console.log(`[TimetableTrigger] Last trigger time: ${lastTriggerTime ? new Date(lastTriggerTime).toISOString() : 'never'}`);
+		console.log(`[TimetableTrigger] Should trigger: ${shouldTrigger}`);
+	}
+
+	static logSkipTrigger(nextRun: Date) {
+		console.log(`[TimetableTrigger] Not triggering. Next scheduled: ${this.formatTime(nextRun)} UTC`);
+	}
+
+	static logExecution(type: 'manual' | 'automatic', time: Date, timezone?: string) {
+		const symbol = type === 'manual' ? '✓ MANUAL EXECUTION' : '✓ TRIGGERING WORKFLOW';
+		console.log(`[TimetableTrigger] ${symbol} at ${this.formatTime(time)} UTC`);
 		
-		// If all slots are for 'ALL' days, use simple expression
-		if (dayGroups.size === 1 && dayGroups.has('ALL')) {
-			const hours = Array.from(new Set(dayGroups.get('ALL')!)).sort().join(',');
-			return `0 * ${hours} * * *` as any;
+		if (type === 'manual' && timezone) {
+			console.log(`[TimetableTrigger] Manual execution in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
 		}
-		
-		// For day-specific schedules, we'll use a more general cron expression
-		// and rely on shouldTriggerNow() to do the filtering
-		const allHours = Array.from(new Set(
-			config.hourConfigs.map(hc => hc.hour)
-		)).sort().join(',');
-		
-		// Note: We use a general expression and filter in shouldTriggerNow()
-		// because cron day-of-week syntax can get complex with mixed days
-		return `0 * ${allHours} * * *` as any;
-	} else {
-		// Legacy support
-		const configuredHours = config.fixedHours || [];
-		const hoursExpression = configuredHours.join(',');
-		return `0 * ${hoursExpression} * * *` as any;
+	}
+
+	static logNextScheduled(nextRun: Date) {
+		console.log(`[TimetableTrigger] Next scheduled after manual execution: ${this.formatTime(nextRun)} UTC`);
+	}
+
+	static logError(context: string, error: Error | string) {
+		console.log(`[TimetableTrigger] Error ${context}: ${error instanceof Error ? error.message : error}`);
 	}
 }
+
+export function createResultData(
+	momentTz: moment.Moment,
+	timezone: string,
+	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
+	nextRun: NextRunTime,
+	isManual: boolean
+) {
+	return {
+		timestamp: momentTz.toISOString(true),
+		'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+		'Readable time': momentTz.format('h:mm:ss a'),
+		'Day of week': momentTz.format('dddd'),
+		Year: momentTz.format('YYYY'),
+		Month: momentTz.format('MMMM'),
+		'Day of month': momentTz.format('DD'),
+		Hour: momentTz.format('HH'),
+		Minute: momentTz.format('mm'),
+		Second: momentTz.format('ss'),
+		Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
+		'Trigger hours': hourConfigs.map(hc => ({
+			hour: hc.hour,
+			minute: hc.minute,
+			dayOfWeek: hc.dayOfWeek
+		})),
+		'Next scheduled': nextRun.candidate.toISOString(),
+		'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
+		'Manual execution': isManual
+	};
+}
+

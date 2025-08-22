@@ -14,8 +14,7 @@ jest.mock('moment-timezone', () => {
 import { 
 	getNextSlotHour, 
 	getNextRunTime, 
-	shouldTriggerAtTime, 
-	toCronExpression 
+	shouldTriggerAtTime
 } from '../../nodes/Timetable/GenericFunctions';
 import type { TimetableConfig } from '../../nodes/Timetable/SchedulerInterface';
 
@@ -238,43 +237,6 @@ describe('shouldTriggerAtTime', () => {
 	});
 });
 
-describe('toCronExpression', () => {
-	it('should generate cron expression for fixed hours', () => {
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21],
-			randomizeMinutes: true
-		};
-		
-		const result = toCronExpression(config);
-		
-		expect(result).toBe('0 * 12,16,21 * * *');
-	});
-
-	it('should generate cron expression for single hour', () => {
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [15],
-			randomizeMinutes: false
-		};
-		
-		const result = toCronExpression(config);
-		
-		expect(result).toBe('0 * 15 * * *');
-	});
-
-	it('should generate cron expression for multiple unsorted hours', () => {
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [21, 9, 15, 6],
-			randomizeMinutes: true
-		};
-		
-		const result = toCronExpression(config);
-		
-		expect(result).toBe('0 * 21,9,15,6 * * *');
-	});
-});
 
 describe('Day-specific scheduling', () => {
 	describe('getNextSlotHour with day constraints', () => {
@@ -384,32 +346,4 @@ describe('Day-specific scheduling', () => {
 		});
 	});
 
-	describe('toCronExpression with day constraints', () => {
-		it('should create expression for ALL day configuration', () => {
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'ALL' },
-					{ hour: 16, minuteMode: 'random', dayOfWeek: 'ALL' }
-				]
-			};
-			
-			const result = toCronExpression(config);
-			
-			expect(result).toBe('0 * 14,16 * * *');
-		});
-
-		it('should create expression for mixed day configuration', () => {
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'MON' },
-					{ hour: 16, minuteMode: 'random', dayOfWeek: 'FRI' }
-				]
-			};
-			
-			const result = toCronExpression(config);
-			
-			// Should include all hours and rely on shouldTriggerNow for day filtering
-			expect(result).toBe('0 * 14,16 * * *');
-		});
-	});
 });

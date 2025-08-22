@@ -7,8 +7,122 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
-import { shouldTriggerNow, getNextRunTime } from './GenericFunctions';
+import { shouldTriggerNow, getNextRunTime, createResultData, TimetableLogger } from './GenericFunctions';
 import type { TimetableConfig } from './SchedulerInterface';
+
+// Generate hour options dynamically instead of hardcoding 98 lines
+function generateHourOptions() {
+	return Array.from({ length: 24 }, (_, i) => ({
+		name: i === 0 ? '00:00 (Midnight)' : 
+			  i === 12 ? '12:00 (Noon)' : 
+			  `${i.toString().padStart(2, '0')}:00`,
+		value: i
+	}));
+}
+
+// Parse and validate trigger configuration
+function parseAndValidateConfig(
+	triggerHoursData: any,
+	getNode: () => any
+): Array<{ hour: number; minute: string; dayOfWeek?: string }> {
+	if (!triggerHoursData.hours || !Array.isArray(triggerHoursData.hours)) {
+		throw new NodeOperationError(
+			getNode(),
+			'Invalid trigger hours configuration'
+		);
+	}
+
+	const hourConfigs = triggerHoursData.hours
+		.filter((item: any) => typeof item.hour === 'number' && item.hour >= 0 && item.hour <= 23)
+		.map((item: any) => {
+			// Validate day of week
+			const dayOfWeek = item.dayOfWeek || 'ALL';
+			const validDays = ['ALL', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+			if (!validDays.includes(dayOfWeek)) {
+				throw new NodeOperationError(
+					getNode(),
+					`Invalid day of week for hour ${item.hour}: ${dayOfWeek} (must be one of: ${validDays.join(', ')})`
+				);
+			}
+
+			// Validate minute configuration
+			const minute = item.minute || 'random';
+			if (minute !== 'random') {
+				const minuteNum = Number(minute);
+				if (isNaN(minuteNum) || minuteNum < 0 || minuteNum > 59) {
+					throw new NodeOperationError(
+						getNode(),
+						`Invalid minute for hour ${item.hour}: ${minute} (must be 'random' or 0-59)`
+					);
+				}
+			}
+
+			return { hour: item.hour, minute, dayOfWeek };
+		})
+		.sort((a: any, b: any) => a.hour - b.hour);
+		
+	if (hourConfigs.length === 0) {
+		throw new NodeOperationError(
+			getNode(),
+			'At least one valid hour must be selected'
+		);
+	}
+
+	return hourConfigs;
+}
+
+// Create the execution trigger function
+function createExecuteTrigger(
+	config: TimetableConfig, 
+	timezone: string, 
+	staticData: { lastTriggerTime?: number }, 
+	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
+	emit: (data: any) => void,
+	helpers: any
+) {
+	return () => {
+		const currentTime = moment.tz(timezone).toDate();
+		const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
+		
+		TimetableLogger.logTriggerCheck(currentTime, timezone, staticData.lastTriggerTime, shouldTrigger);
+		
+		if (!shouldTrigger) {
+			const nextRun = getNextRunTime(currentTime, config);
+			TimetableLogger.logSkipTrigger(nextRun.candidate);
+			return;
+		}
+
+		TimetableLogger.logExecution('automatic', currentTime);
+		staticData.lastTriggerTime = Date.now();
+		
+		const momentTz = moment.tz(timezone);
+		const nextRun = getNextRunTime(momentTz.toDate(), config);
+		const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
+
+		emit([helpers.returnJsonArray([resultData])]);
+	};
+}
+
+// Create the manual trigger function
+function createManualTrigger(
+	config: TimetableConfig,
+	timezone: string, 
+	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
+	emit: (data: any) => void,
+	helpers: any
+) {
+	return async () => {
+		const momentTz = moment.tz(timezone);
+		
+		TimetableLogger.logExecution('manual', momentTz.toDate(), timezone);
+		
+		const nextRun = getNextRunTime(momentTz.toDate(), config);
+		TimetableLogger.logNextScheduled(nextRun.candidate);
+		
+		const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, true);
+		emit([helpers.returnJsonArray([resultData])]);
+	};
+}
 
 export class TimetableTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -100,106 +214,9 @@ export class TimetableTrigger implements INodeType {
 						displayName: 'Hour',
 						name: 'hour',
 						type: 'options',
-						default: 12,
+						default: '',
 						description: 'Hour when the workflow should trigger (24-hour format)',
-						options: [
-									{
-										name: '00:00 (Midnight)',
-										value: 0
-									},
-									{
-										name: '01:00',
-										value: 1
-									},
-									{
-										name: '02:00',
-										value: 2
-									},
-									{
-										name: '03:00',
-										value: 3
-									},
-									{
-										name: '04:00',
-										value: 4
-									},
-									{
-										name: '05:00',
-										value: 5
-									},
-									{
-										name: '06:00',
-										value: 6
-									},
-									{
-										name: '07:00',
-										value: 7
-									},
-									{
-										name: '08:00',
-										value: 8
-									},
-									{
-										name: '09:00',
-										value: 9
-									},
-									{
-										name: '10:00',
-										value: 10
-									},
-									{
-										name: '11:00',
-										value: 11
-									},
-									{
-										name: '12:00 (Noon)',
-										value: 12
-									},
-									{
-										name: '13:00',
-										value: 13
-									},
-									{
-										name: '14:00',
-										value: 14
-									},
-									{
-										name: '15:00',
-										value: 15
-									},
-									{
-										name: '16:00',
-										value: 16
-									},
-									{
-										name: '17:00',
-										value: 17
-									},
-									{
-										name: '18:00',
-										value: 18
-									},
-									{
-										name: '19:00',
-										value: 19
-									},
-									{
-										name: '20:00',
-										value: 20
-									},
-									{
-										name: '21:00',
-										value: 21
-									},
-									{
-										name: '22:00',
-										value: 22
-									},
-									{
-										name: '23:00',
-										value: 23
-									},
-					]
+						options: generateHourOptions()
 							},
 							{
 								displayName: 'Minute',
@@ -240,48 +257,7 @@ export class TimetableTrigger implements INodeType {
 		// Parse and validate trigger hours
 		let hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>;
 		try {
-			if (!triggerHoursData.hours || !Array.isArray(triggerHoursData.hours)) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'Invalid trigger hours configuration'
-				);
-			}
-
-			hourConfigs = triggerHoursData.hours
-				.filter(item => typeof item.hour === 'number' && item.hour >= 0 && item.hour <= 23)
-				.map(item => {
-					// Validate day of week
-					const dayOfWeek = item.dayOfWeek || 'ALL';
-					const validDays = ['ALL', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-					if (!validDays.includes(dayOfWeek)) {
-						throw new NodeOperationError(
-							this.getNode(),
-							`Invalid day of week for hour ${item.hour}: ${dayOfWeek} (must be one of: ${validDays.join(', ')})`
-						);
-					}
-
-					// Validate minute configuration
-					const minute = item.minute || 'random';
-					if (minute !== 'random') {
-						const minuteNum = Number(minute);
-						if (isNaN(minuteNum) || minuteNum < 0 || minuteNum > 59) {
-							throw new NodeOperationError(
-								this.getNode(),
-								`Invalid minute for hour ${item.hour}: ${minute} (must be 'random' or 0-59)`
-							);
-						}
-					}
-
-					return { hour: item.hour, minute, dayOfWeek };
-				})
-				.sort((a, b) => a.hour - b.hour);
-				
-			if (hourConfigs.length === 0) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'At least one valid hour must be selected'
-				);
-			}
+			hourConfigs = parseAndValidateConfig(triggerHoursData, this.getNode.bind(this));
 		} catch (error) {
 			throw new NodeOperationError(
 				this.getNode(),
@@ -302,77 +278,36 @@ export class TimetableTrigger implements INodeType {
 		};
 
 		// Debug logging for configuration
-		console.log(`[TimetableTrigger] Configuration loaded at ${new Date().toISOString()}:`);
-		console.log(`[TimetableTrigger] Timezone: ${timezone}`);
-		console.log(`[TimetableTrigger] Hour configs:`, config.hourConfigs.map(hc => ({
+		const logConfigs = config.hourConfigs.map(hc => ({
 			hour: hc.hour,
 			minute: hc.minute ?? 'random',
 			dayOfWeek: hc.dayOfWeek,
 			minuteMode: hc.minuteMode
-		})));
+		}));
 		
 		// Compute and log next trigger time
 		try {
 			const nowForNext = moment.tz(timezone).toDate();
 			const nextRun = getNextRunTime(nowForNext, config);
-			console.log(`[TimetableTrigger] Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
+			TimetableLogger.logConfiguration(timezone, logConfigs, nextRun.candidate);
 		} catch (error) {
-			console.log(`[TimetableTrigger] Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			TimetableLogger.logConfiguration(timezone, logConfigs);
+			TimetableLogger.logError('computing next run time', error instanceof Error ? error : 'Unknown error');
 		}
 
-		const executeTrigger = () => {
-			const currentTime = moment.tz(timezone).toDate();
-			const currentTimeUtc = moment.utc(currentTime);
-			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
-			
-			// Debug logging for every check
-			console.log(`[TimetableTrigger] Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
-			console.log(`[TimetableTrigger] Current time in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
-			console.log(`[TimetableTrigger] Last trigger time: ${staticData.lastTriggerTime ? new Date(staticData.lastTriggerTime).toISOString() : 'never'}`);
-			console.log(`[TimetableTrigger] Should trigger: ${shouldTrigger}`);
-			
-			if (!shouldTrigger) {
-				const nextRun = getNextRunTime(currentTime, config);
-				console.log(`[TimetableTrigger] Not triggering. Next scheduled: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
-				return;
-			}
-
-			console.log(`[TimetableTrigger] ✓ TRIGGERING WORKFLOW at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC`);
-			staticData.lastTriggerTime = Date.now();
-			
-			const momentTz = moment.tz(timezone);
-			const nextRun = getNextRunTime(momentTz.toDate(), config);
-			
-			const resultData = {
-				timestamp: momentTz.toISOString(true),
-				'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
-				'Readable time': momentTz.format('h:mm:ss a'),
-				'Day of week': momentTz.format('dddd'),
-				Year: momentTz.format('YYYY'),
-				Month: momentTz.format('MMMM'),
-				'Day of month': momentTz.format('DD'),
-				Hour: momentTz.format('HH'),
-				Minute: momentTz.format('mm'),
-				Second: momentTz.format('ss'),
-				Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
-				'Trigger hours': hourConfigs.map(hc => ({
-					hour: hc.hour,
-					minute: hc.minute,
-					dayOfWeek: hc.dayOfWeek
-				})),
-				'Next scheduled': nextRun.candidate.toISOString(),
-				'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
-				'Manual execution': false
-			};
-
-			this.emit([this.helpers.returnJsonArray([resultData])]);
-		};
+		const executeTrigger = createExecuteTrigger(
+			config, 
+			timezone, 
+			staticData, 
+			hourConfigs,
+			this.emit.bind(this),
+			this.helpers
+		);
 
 		if (this.getMode() !== 'manual') {
 			try {
-				// Use every minute cron to check conditions frequently
-				console.log(`[TimetableTrigger] Registering cron job to run every minute for condition checking`);
-				this.helpers.registerCron('* * * * *' as any, () => executeTrigger());
+				TimetableLogger.logCronRegistration();
+				this.helpers.registerCron('* * * * *' as any, executeTrigger);
 			} catch (error) {
 				throw new NodeOperationError(
 					this.getNode(),
@@ -381,41 +316,13 @@ export class TimetableTrigger implements INodeType {
 			}
 			return {};
 		} else {
-			// For manual execution, trigger immediately without condition checks
-			const manualTriggerFunction = async () => {
-				const momentTz = moment.tz(timezone);
-				const currentTimeUtc = moment.utc();
-				
-				console.log(`[TimetableTrigger] ✓ MANUAL EXECUTION at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC`);
-				console.log(`[TimetableTrigger] Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
-				
-				const nextRun = getNextRunTime(momentTz.toDate(), config);
-				console.log(`[TimetableTrigger] Next scheduled after manual execution: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
-				
-				const resultData = {
-					timestamp: momentTz.toISOString(true),
-					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
-					'Readable time': momentTz.format('h:mm:ss a'),
-					'Day of week': momentTz.format('dddd'),
-					Year: momentTz.format('YYYY'),
-					Month: momentTz.format('MMMM'),
-					'Day of month': momentTz.format('DD'),
-					Hour: momentTz.format('HH'),
-					Minute: momentTz.format('mm'),
-					Second: momentTz.format('ss'),
-					Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
-					'Trigger hours': hourConfigs.map(hc => ({
-						hour: hc.hour,
-						minute: hc.minute,
-						dayOfWeek: hc.dayOfWeek
-					})),
-					'Next scheduled': nextRun.candidate.toISOString(),
-					'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
-					'Manual execution': true
-				};
-
-				this.emit([this.helpers.returnJsonArray([resultData])]);
-			};
+			const manualTriggerFunction = createManualTrigger(
+				config,
+				timezone, 
+				hourConfigs,
+				this.emit.bind(this),
+				this.helpers
+			);
 
 			return { manualTriggerFunction };
 		}
