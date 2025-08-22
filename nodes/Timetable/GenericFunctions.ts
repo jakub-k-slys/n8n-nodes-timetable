@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import { randomInt } from 'n8n-workflow';
 
-import type { TimetableConfig, NextSlotResult, NextRunTime, DayOfWeek } from './SchedulerInterface';
+import type { TimetableConfig, NextSlotResult, NextRunTime, DayOfWeek, RawHourConfig } from './SchedulerInterface';
 
 // Helper function to map day of week string to JavaScript day number (0=Sunday, 1=Monday, etc.)
 function dayStringToNumber(day: DayOfWeek): number | null {
@@ -301,7 +301,7 @@ export class TimetableLogger {
 export function createResultData(
 	momentTz: moment.Moment,
 	timezone: string,
-	hourConfigs: Array<{ hour: number; minute: string; dayOfWeek?: string }>,
+	hourConfigs: RawHourConfig[],
 	nextRun: NextRunTime,
 	isManual: boolean
 ) {
