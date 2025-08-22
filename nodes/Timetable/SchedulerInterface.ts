@@ -3,9 +3,7 @@ export type DayOfWeek = 'ALL' | 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 
 export interface HourConfig {
 	hour: number;
 	minuteMode: 'random' | 'specific';
-	minute?: number;
-	minMinute?: number;
-	maxMinute?: number;
+	minute?: number; // Only used when minuteMode is 'specific'
 	dayOfWeek?: DayOfWeek; // Optional for backward compatibility
 }
 
