@@ -96,9 +96,8 @@ export function getNextRunTime(now: Date, config: TimetableConfig): NextRunTime 
 			if (hourConfig.minuteMode === 'specific') {
 				minute = hourConfig.minute ?? 0;
 			} else {
-				const minMinute = hourConfig.minMinute ?? 0;
-				const maxMinute = hourConfig.maxMinute ?? 59;
-				minute = randomInt(minMinute, maxMinute + 1);
+				// Random mode: generate random minute between 0-59
+				minute = randomInt(0, 60);
 			}
 		}
 	} else {
@@ -167,32 +166,76 @@ export function shouldTriggerAtTime(
 	config: TimetableConfig
 ): boolean {
 	const currentHour = currentTime.getHours();
+	const currentTimeUtc = new Date(currentTime.getTime());
+	
+	console.log(`[shouldTriggerAtTime] Checking trigger conditions:`);
+	console.log(`[shouldTriggerAtTime] Current time: ${currentTimeUtc.toISOString()} (Hour: ${currentHour}, Day: ${currentTime.toLocaleDateString('en-US', {weekday: 'short'})})`);
 	
 	// Check if current hour and day match any configured slots
-	const hasValidSlot = config.hourConfigs ? 
-		config.hourConfigs.some(hc => 
+	const matchingConfigs = config.hourConfigs ? 
+		config.hourConfigs.filter(hc => 
 			hc.hour === currentHour && matchesDay(currentTime, hc.dayOfWeek)
-		) : 
+		) : [];
+	
+	const hasValidSlot = config.hourConfigs ? 
+		matchingConfigs.length > 0 : 
 		(config.fixedHours || []).includes(currentHour);
+	
+	console.log(`[shouldTriggerAtTime] Matching hour configs:`, matchingConfigs.map(hc => ({
+		hour: hc.hour,
+		dayOfWeek: hc.dayOfWeek,
+		minuteMode: hc.minuteMode,
+		minute: hc.minute
+	})));
+	
+	// Calculate and show the exact trigger time for each matching config
+	if (matchingConfigs.length > 0) {
+		console.log(`[shouldTriggerAtTime] Calculated trigger times for current hour ${currentHour}:`);
+		matchingConfigs.forEach((hc, index) => {
+			let calculatedMinute: number;
+			if (hc.minuteMode === 'specific') {
+				calculatedMinute = hc.minute ?? 0;
+				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (specific minute)`);
+			} else {
+				calculatedMinute = randomInt(0, 60);
+				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (random minute 0-59)`);
+			}
+			
+			// Show the full UTC timestamp for this calculated time
+			const calculatedTime = new Date(currentTime);
+			calculatedTime.setHours(currentHour, calculatedMinute, 0, 0);
+			console.log(`[shouldTriggerAtTime]   Config ${index + 1} exact time: ${calculatedTime.toISOString()}`);
+		});
+	}
+	
+	console.log(`[shouldTriggerAtTime] Has valid slot: ${hasValidSlot}`);
 		
 	if (!hasValidSlot) {
+		console.log(`[shouldTriggerAtTime] ✗ No valid time slot for current hour ${currentHour}`);
 		return false;
 	}
 
 	// If no previous trigger, allow this one
 	if (!lastTriggerTime) {
+		console.log(`[shouldTriggerAtTime] ✓ No previous trigger, allowing execution`);
 		return true;
 	}
 
 	const lastTrigger = new Date(lastTriggerTime);
 	const timeSinceLastTrigger = currentTime.getTime() - lastTrigger.getTime();
+	const timeSinceLastTriggerMinutes = Math.floor(timeSinceLastTrigger / (60 * 1000));
+	
+	console.log(`[shouldTriggerAtTime] Last trigger: ${lastTrigger.toISOString()} (${timeSinceLastTriggerMinutes} minutes ago)`);
+	console.log(`[shouldTriggerAtTime] Last trigger hour: ${lastTrigger.getHours()}, Current hour: ${currentHour}`);
 	
 	// Prevent multiple triggers within the same hour
 	const oneHourMs = 60 * 60 * 1000;
 	if (timeSinceLastTrigger < oneHourMs && lastTrigger.getHours() === currentHour) {
+		console.log(`[shouldTriggerAtTime] ✗ Already triggered this hour (${timeSinceLastTriggerMinutes} minutes ago)`);
 		return false;
 	}
 
+	console.log(`[shouldTriggerAtTime] ✓ Conditions met, trigger allowed`);
 	return true;
 }
 

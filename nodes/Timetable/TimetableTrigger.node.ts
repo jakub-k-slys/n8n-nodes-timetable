@@ -7,7 +7,7 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
-import { shouldTriggerNow, toCronExpression, getNextRunTime } from './GenericFunctions';
+import { shouldTriggerNow, getNextRunTime } from './GenericFunctions';
 import type { TimetableConfig } from './SchedulerInterface';
 
 export class TimetableTrigger implements INodeType {
@@ -297,16 +297,47 @@ export class TimetableTrigger implements INodeType {
 				hour: item.hour,
 				minute: item.minute === 'random' ? undefined : Number(item.minute),
 				minuteMode: item.minute === 'random' ? 'random' : 'specific',
-				minMinute: item.minute === 'random' ? 0 : undefined,
-				maxMinute: item.minute === 'random' ? 59 : undefined,
 				dayOfWeek: item.dayOfWeek as any
 			}))
 		};
 
-		const executeTrigger = () => {
-			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
-			if (!shouldTrigger) return;
+		// Debug logging for configuration
+		console.log(`[TimetableTrigger] Configuration loaded at ${new Date().toISOString()}:`);
+		console.log(`[TimetableTrigger] Timezone: ${timezone}`);
+		console.log(`[TimetableTrigger] Hour configs:`, config.hourConfigs.map(hc => ({
+			hour: hc.hour,
+			minute: hc.minute ?? 'random',
+			dayOfWeek: hc.dayOfWeek,
+			minuteMode: hc.minuteMode
+		})));
+		
+		// Compute and log next trigger time
+		try {
+			const nowForNext = moment.tz(timezone).toDate();
+			const nextRun = getNextRunTime(nowForNext, config);
+			console.log(`[TimetableTrigger] Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
+		} catch (error) {
+			console.log(`[TimetableTrigger] Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
 
+		const executeTrigger = () => {
+			const currentTime = moment.tz(timezone).toDate();
+			const currentTimeUtc = moment.utc(currentTime);
+			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
+			
+			// Debug logging for every check
+			console.log(`[TimetableTrigger] Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
+			console.log(`[TimetableTrigger] Current time in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
+			console.log(`[TimetableTrigger] Last trigger time: ${staticData.lastTriggerTime ? new Date(staticData.lastTriggerTime).toISOString() : 'never'}`);
+			console.log(`[TimetableTrigger] Should trigger: ${shouldTrigger}`);
+			
+			if (!shouldTrigger) {
+				const nextRun = getNextRunTime(currentTime, config);
+				console.log(`[TimetableTrigger] Not triggering. Next scheduled: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+				return;
+			}
+
+			console.log(`[TimetableTrigger] ✓ TRIGGERING WORKFLOW at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC`);
 			staticData.lastTriggerTime = Date.now();
 			
 			const momentTz = moment.tz(timezone);
@@ -330,6 +361,8 @@ export class TimetableTrigger implements INodeType {
 					dayOfWeek: hc.dayOfWeek
 				})),
 				'Next scheduled': nextRun.candidate.toISOString(),
+				'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
+				'Manual execution': false
 			};
 
 			this.emit([this.helpers.returnJsonArray([resultData])]);
@@ -337,8 +370,9 @@ export class TimetableTrigger implements INodeType {
 
 		if (this.getMode() !== 'manual') {
 			try {
-				const cronExpression = toCronExpression(config);
-				this.helpers.registerCron(cronExpression, () => executeTrigger());
+				// Use every minute cron to check conditions frequently
+				console.log(`[TimetableTrigger] Registering cron job to run every minute for condition checking`);
+				this.helpers.registerCron('* * * * *' as any, () => executeTrigger());
 			} catch (error) {
 				throw new NodeOperationError(
 					this.getNode(),
@@ -347,8 +381,40 @@ export class TimetableTrigger implements INodeType {
 			}
 			return {};
 		} else {
+			// For manual execution, trigger immediately without condition checks
 			const manualTriggerFunction = async () => {
-				executeTrigger();
+				const momentTz = moment.tz(timezone);
+				const currentTimeUtc = moment.utc();
+				
+				console.log(`[TimetableTrigger] ✓ MANUAL EXECUTION at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC`);
+				console.log(`[TimetableTrigger] Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
+				
+				const nextRun = getNextRunTime(momentTz.toDate(), config);
+				console.log(`[TimetableTrigger] Next scheduled after manual execution: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+				
+				const resultData = {
+					timestamp: momentTz.toISOString(true),
+					'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+					'Readable time': momentTz.format('h:mm:ss a'),
+					'Day of week': momentTz.format('dddd'),
+					Year: momentTz.format('YYYY'),
+					Month: momentTz.format('MMMM'),
+					'Day of month': momentTz.format('DD'),
+					Hour: momentTz.format('HH'),
+					Minute: momentTz.format('mm'),
+					Second: momentTz.format('ss'),
+					Timezone: `${timezone} (UTC${momentTz.format('Z')})`,
+					'Trigger hours': hourConfigs.map(hc => ({
+						hour: hc.hour,
+						minute: hc.minute,
+						dayOfWeek: hc.dayOfWeek
+					})),
+					'Next scheduled': nextRun.candidate.toISOString(),
+					'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
+					'Manual execution': true
+				};
+
+				this.emit([this.helpers.returnJsonArray([resultData])]);
 			};
 
 			return { manualTriggerFunction };
