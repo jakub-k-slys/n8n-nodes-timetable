@@ -143,9 +143,9 @@ describe('TimetableTrigger', () => {
 		it('should handle multiple hour configurations', async () => {
 			(mockContext.getNodeParameter as jest.Mock).mockReturnValue({
 				hours: [
-					{ hour: 9, minute: '30', dayOfWeek: 'MON' },
+					{ hour: 9, minute: 30, dayOfWeek: 'MON' },
 					{ hour: 14, minute: 'random', dayOfWeek: 'FRI' },
-					{ hour: 18, minute: '0', dayOfWeek: 'ALL' }
+					{ hour: 18, minute: 0, dayOfWeek: 'ALL' }
 				]
 			});
 

@@ -22,20 +22,15 @@ export const HourCodec = t.refinement(
 export type Hour = t.TypeOf<typeof HourCodec>;
 
 export const MinuteCodec = t.refinement(
-	t.union([t.literal('random'), t.number, t.string]),
-	(n): n is number | 'random' | string => {
+	t.union([t.literal('random'), t.number]),
+	(n): n is number | 'random' => {
 		if (n === 'random') return true;
-		if (typeof n === 'number') return n >= 0 && n <= 59;
-		if (typeof n === 'string') {
-			const num = parseInt(n, 10);
-			return !isNaN(num) && num >= 0 && num <= 59 && num.toString() === n;
-		}
-		return false;
+		return n >= 0 && n <= 59;
 	},
 	'Minute'
 );
 
-export type Minute = 'random' | number | string;
+export type Minute = t.TypeOf<typeof MinuteCodec>;
 
 export const HourConfigCodec = t.type({
 	hour: HourCodec,
@@ -47,7 +42,6 @@ export const TriggerSlotsCodec = t.type({
 	hours: t.array(HourConfigCodec)
 });
 
-// Type extraction from codecs
 export type HourConfig = t.TypeOf<typeof HourConfigCodec>;
 export type TriggerSlots = t.TypeOf<typeof TriggerSlotsCodec>;
 

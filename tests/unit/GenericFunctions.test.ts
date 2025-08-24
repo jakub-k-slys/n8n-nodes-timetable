@@ -132,19 +132,6 @@ describe('getNextRunTime', () => {
 		expect(result.candidate.getMinutes()).toBe(0);
 		expect(result.candidate.getDate()).toBe(2); // Next day
 	});
-
-	it('should handle string minute values', () => {
-		const now = new Date('2024-01-01T10:00:00Z');
-		const hourConfigs: HourConfig[] = [
-			{ hour: 12, minute: '45', dayOfWeek: 'ALL' }
-		];
-		
-		const result = getNextRunTime(now, hourConfigs);
-		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(45);
-		expect(result.candidate.getDate()).toBe(1); // Same day
-	});
 });
 
 describe('shouldTriggerAtTime', () => {

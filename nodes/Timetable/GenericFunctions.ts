@@ -78,8 +78,6 @@ export const getNextRunTime = (now: Date, hourConfigs: HourConfig[]): NextRunTim
 	let minute: number;
 	if (hourConfig?.minute === 'random') {
 		minute = randomInt(0, 60);
-	} else if (typeof hourConfig?.minute === 'string') {
-		minute = parseInt(hourConfig.minute, 10);
 	} else {
 		minute = hourConfig?.minute ?? 0;
 	}
@@ -156,9 +154,6 @@ export const shouldTriggerAtTime = (
 			if (hc.minute === 'random') {
 				calculatedMinute = randomInt(0, 60);
 				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (random minute 0-59)`);
-			} else if (typeof hc.minute === 'string') {
-				calculatedMinute = parseInt(hc.minute, 10);
-				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (specific minute)`);
 			} else {
 				calculatedMinute = hc.minute ?? 0;
 				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (specific minute)`);
