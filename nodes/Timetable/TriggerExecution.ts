@@ -5,9 +5,8 @@
 import moment from 'moment-timezone';
 import { shouldTriggerNow, getNextRunTime, createResultData } from './GenericFunctions';
 
-import type { 
-	TimetableConfig, 
-	RawHourConfig, 
+import type {
+	HourConfig,
 	StaticData,
 	NodeHelpers
 } from './SchedulerInterface';
@@ -17,11 +16,11 @@ import type {
  * @param params - Object containing all required parameters
  * @returns Function that handles the trigger execution logic
  */
-export const createExecuteTrigger = (config: TimetableConfig, timezone: string, staticData: StaticData, hourConfigs: RawHourConfig[], emit: (data: any) => void, helpers: NodeHelpers, logger: any) => {
+export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: StaticData, emit: (data: any) => void, helpers: NodeHelpers, logger: any) => {
 	return () => {
 		try {
 			const currentTime = moment.tz(timezone).toDate();
-			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, config, timezone);
+			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, hourConfigs, timezone);
 			
 			const currentTimeUtc = moment.utc(currentTime);
 			logger.debug(`Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
@@ -31,7 +30,7 @@ export const createExecuteTrigger = (config: TimetableConfig, timezone: string, 
 			
 			if (!shouldTrigger) {
 				try {
-					const nextRun = getNextRunTime(currentTime, config);
+					const nextRun = getNextRunTime(currentTime, hourConfigs);
 					logger.debug(`Not triggering. Next scheduled: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
 				} catch (error) {
 					logger.error(`Error computing next run time for skip: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -44,7 +43,7 @@ export const createExecuteTrigger = (config: TimetableConfig, timezone: string, 
 			
 			try {
 				const momentTz = moment.tz(timezone);
-				const nextRun = getNextRunTime(momentTz.toDate(), config);
+				const nextRun = getNextRunTime(momentTz.toDate(), hourConfigs);
 				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
 				emit([helpers.returnJsonArray([resultData])]);
 			} catch (error) {

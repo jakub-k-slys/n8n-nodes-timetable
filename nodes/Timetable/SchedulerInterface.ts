@@ -22,15 +22,20 @@ export const HourCodec = t.refinement(
 export type Hour = t.TypeOf<typeof HourCodec>;
 
 export const MinuteCodec = t.refinement(
-	t.union([t.literal('random'), t.number]),
-	(n): n is number | 'random' => {
+	t.union([t.literal('random'), t.number, t.string]),
+	(n): n is number | 'random' | string => {
 		if (n === 'random') return true;
-		return n >= 0 && n <= 59;
+		if (typeof n === 'number') return n >= 0 && n <= 59;
+		if (typeof n === 'string') {
+			const num = parseInt(n, 10);
+			return !isNaN(num) && num >= 0 && num <= 59 && num.toString() === n;
+		}
+		return false;
 	},
 	'Minute'
 );
 
-export type Minute = t.TypeOf<typeof MinuteCodec>;
+export type Minute = 'random' | number | string;
 
 export const HourConfigCodec = t.type({
 	hour: HourCodec,

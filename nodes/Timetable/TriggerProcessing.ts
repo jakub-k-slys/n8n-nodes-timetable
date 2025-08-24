@@ -5,13 +5,10 @@
 import moment from 'moment-timezone';
 import { NodeOperationError } from 'n8n-workflow';
 import type { ITriggerResponse } from 'n8n-workflow';
-
 import { getNextRunTime, createSimpleResultData } from './GenericFunctions';
 import { createExecuteTrigger } from './TriggerExecution';
-
 import {
-	TimetableConfig,
-	RawHourConfig,
+	HourConfig,
 	TriggerSlots,
 	StaticData,
 	NodeHelpers, DefaultTriggerSlots, TriggerSlotsCodec,
@@ -79,27 +76,17 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 	}
 
 	// Sort by hour for consistent ordering
-	let hourConfigs: RawHourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
+	let hourConfigs: HourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
 
-	const config: TimetableConfig = {
-		hourConfigs: hourConfigs.map(item => ({
-			hour: item.hour,
-			minute: item.minute === 'random' ? undefined : Number(item.minute),
-			minuteMode: item.minute === 'random' ? 'random' : 'specific',
-			dayOfWeek: item.dayOfWeek as any
-		}))
-	};
-
-	const logConfigs = config.hourConfigs.map(hc => ({
+	const logConfigs = hourConfigs.map(hc => ({
 		hour: hc.hour,
 		minute: hc.minute ?? 'random',
 		dayOfWeek: hc.dayOfWeek,
-		minuteMode: hc.minuteMode
 	}));
 	
 	try {
 		const nowForNext = moment.tz(timezone).toDate();
-		const nextRun = getNextRunTime(nowForNext, config);
+		const nextRun = getNextRunTime(nowForNext, hourConfigs);
 		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
 		logger.info(`Timezone: ${timezone}`);
 		logger.info(`Hour configs: ${JSON.stringify(logConfigs)}`);
@@ -111,7 +98,7 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
 
-	const executeTrigger = createExecuteTrigger(config, timezone, staticData, hourConfigs, emit, helpers, logger);
+	const executeTrigger = createExecuteTrigger(hourConfigs, timezone, staticData, emit, helpers, logger);
 
 	try {
 		logger.info('Registering cron job to run every minute for condition checking');
