@@ -2,8 +2,6 @@ import moment from 'moment-timezone';
 import { randomInt } from 'n8n-workflow';
 
 import type { NextSlotResult, NextRunTime, DayOfWeek, HourConfig } from './SchedulerInterface';
-
-// Helper function to map day of week string to JavaScript day number (0=Sunday, 1=Monday, etc.)
 const dayStringToNumber = (day: DayOfWeek): number | null => {
 	switch (day) {
 		case 'SUN': return 0;
@@ -13,12 +11,10 @@ const dayStringToNumber = (day: DayOfWeek): number | null => {
 		case 'THU': return 4;
 		case 'FRI': return 5;
 		case 'SAT': return 6;
-		case 'ALL': return null; // null means all days
+		case 'ALL': return null;
 		default: return null;
 	}
 };
-
-// Helper function to check if a date matches the specified day of week
 const matchesDay = (date: Date, dayOfWeek?: DayOfWeek): boolean => {
 	if (!dayOfWeek || dayOfWeek === 'ALL') {
 		return true;
@@ -29,21 +25,15 @@ const matchesDay = (date: Date, dayOfWeek?: DayOfWeek): boolean => {
 
 export const getNextSlotHour = (now: Date, hourConfigs: HourConfig[]): NextSlotResult => {
 	const currentHour = now.getHours();
-	
-	// Find valid slots for today
 	const todaySlots = hourConfigs
 		.filter(hc => matchesDay(now, hc.dayOfWeek))
 		.map(hc => hc.hour)
 		.sort((a, b) => a - b);
-	
-	// Check if there's a slot later today
 	for (const hour of todaySlots) {
 		if (currentHour < hour) {
 			return { hour, isTomorrow: false };
 		}
 	}
-	
-	// Find next available slot starting from tomorrow
 	for (let daysAhead = 1; daysAhead <= 7; daysAhead++) {
 		const futureDate = new Date(now);
 		futureDate.setDate(futureDate.getDate() + daysAhead);

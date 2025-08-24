@@ -77,24 +77,18 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 
 	// Sort by hour for consistent ordering
 	let hourConfigs: HourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
-
-	const logConfigs = hourConfigs.map(hc => ({
-		hour: hc.hour,
-		minute: hc.minute ?? 'random',
-		dayOfWeek: hc.dayOfWeek,
-	}));
 	
 	try {
 		const nowForNext = moment.tz(timezone).toDate();
 		const nextRun = getNextRunTime(nowForNext, hourConfigs);
 		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
 		logger.info(`Timezone: ${timezone}`);
-		logger.info(`Hour configs: ${JSON.stringify(logConfigs)}`);
+		logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
 		logger.info(`Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
 	} catch (error) {
 		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
 		logger.info(`Timezone: ${timezone}`);
-		logger.info(`Hour configs: ${JSON.stringify(logConfigs)}`);
+		logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
 		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
 
@@ -102,7 +96,7 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 
 	try {
 		logger.info('Registering cron job to run every minute for condition checking');
-		registerCron('* * * * * *' as any, executeTrigger);
+		registerCron('* * * * *' as any, executeTrigger);
 	} catch (error) {
 		throw new NodeOperationError(
 			getNode(),
