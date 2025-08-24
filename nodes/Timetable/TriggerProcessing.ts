@@ -27,12 +27,12 @@ import type {
  * @param logger - Logger instance for debugging and info
  * @returns ITriggerResponse with manual trigger function
  */
-export function manualProcessing(
+export const manualProcessing = (
 	getTimezone: () => string,
 	emit: (data: any) => void,
 	helpers: NodeHelpers,
 	logger: any
-): ITriggerResponse {
+): ITriggerResponse => {
 	const timezone = getTimezone();
 	const momentTz = moment.tz(timezone);
 	
@@ -46,7 +46,7 @@ export function manualProcessing(
 	};
 
 	return { manualTriggerFunction };
-}
+};
 
 /**
  * Helper function for normal processing mode
@@ -62,7 +62,7 @@ export function manualProcessing(
  * @returns ITriggerResponse (empty object for normal mode)
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
-export function normalProcessing(
+export const normalProcessing = (
 	getNodeParameter: any,
 	getTimezone: () => string,
 	getWorkflowStaticData: any,
@@ -71,7 +71,7 @@ export function normalProcessing(
 	helpers: NodeHelpers,
 	registerCron: any,
 	logger: any
-): ITriggerResponse {
+): ITriggerResponse => {
 	const triggerHoursData = getNodeParameter('triggerHours', {
 		hours: [
 			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }

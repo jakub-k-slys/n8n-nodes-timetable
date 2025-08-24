@@ -23,7 +23,7 @@ import type {
  * @param logger - Logger instance for debugging and info
  * @returns Function that handles the trigger execution logic
  */
-export function createExecuteTrigger(
+export const createExecuteTrigger = (
 	config: TimetableConfig, 
 	timezone: string, 
 	staticData: StaticData, 
@@ -31,7 +31,7 @@ export function createExecuteTrigger(
 	emit: (data: any) => void,
 	helpers: NodeHelpers,
 	logger: any
-) {
+) => {
 	return () => {
 		try {
 			const currentTime = moment.tz(timezone).toDate();
@@ -78,4 +78,4 @@ export function createExecuteTrigger(
 			logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	};
-}
+};

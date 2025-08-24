@@ -16,10 +16,10 @@ import { RawTriggerHoursDataCodec } from './SchedulerInterface';
  * @returns Validated and sorted hour configurations
  * @throws NodeOperationError if validation fails
  */
-export function parseAndValidateConfig(
+export const parseAndValidateConfig = (
 	triggerHoursData: unknown,
 	getNode: () => any
-): RawHourConfig[] {
+): RawHourConfig[] => {
 	const validation = RawTriggerHoursDataCodec.decode(triggerHoursData);
 	
 	if (!isRight(validation)) {
@@ -47,4 +47,4 @@ export function parseAndValidateConfig(
 
 	// Sort by hour for consistent ordering
 	return hours.sort((a, b) => a.hour - b.hour);
-}
+};
