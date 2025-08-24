@@ -96,3 +96,4 @@ export const RawTriggerHoursDataCodec = t.type({
 // Type extraction from codecs
 export type RawHourConfigFromCodec = t.TypeOf<typeof RawHourConfigCodec>;
 export type RawTriggerHoursDataFromCodec = t.TypeOf<typeof RawTriggerHoursDataCodec>;
+

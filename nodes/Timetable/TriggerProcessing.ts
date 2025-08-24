@@ -21,18 +21,10 @@ import type {
 /**
  * Helper function for manual processing mode
  * Handles immediate manual trigger execution without configuration processing
- * @param getTimezone - Function to get current timezone
- * @param emit - Function to emit workflow data
- * @param helpers - Node helpers for data transformation
- * @param logger - Logger instance for debugging and info
+ * @param params - Object containing all required parameters
  * @returns ITriggerResponse with manual trigger function
  */
-export const manualProcessing = (
-	getTimezone: () => string,
-	emit: (data: any) => void,
-	helpers: NodeHelpers,
-	logger: any
-): ITriggerResponse => {
+export const manualProcessing = (getTimezone: () => string, emit: (data: any) => void, helpers: NodeHelpers, logger: any): ITriggerResponse => {
 	const timezone = getTimezone();
 	const momentTz = moment.tz(timezone);
 	
@@ -51,27 +43,11 @@ export const manualProcessing = (
 /**
  * Helper function for normal processing mode
  * Handles scheduled trigger registration and configuration processing
- * @param getNodeParameter - Function to get node parameters
- * @param getTimezone - Function to get current timezone
- * @param getWorkflowStaticData - Function to get workflow static data
- * @param getNode - Function to get current node
- * @param emit - Function to emit workflow data
- * @param helpers - Node helpers for data transformation
- * @param registerCron - Function to register cron job
- * @param logger - Logger instance for debugging and info
+ * @param params - Object containing all required parameters
  * @returns ITriggerResponse (empty object for normal mode)
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
-export const normalProcessing = (
-	getNodeParameter: any,
-	getTimezone: () => string,
-	getWorkflowStaticData: any,
-	getNode: any,
-	emit: (data: any) => void,
-	helpers: NodeHelpers,
-	registerCron: any,
-	logger: any
-): ITriggerResponse => {
+export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, emit: (data: any) => void, helpers: NodeHelpers, registerCron: any, logger: any): ITriggerResponse => {
 	const triggerHoursData = getNodeParameter('triggerHours', {
 		hours: [
 			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
@@ -124,15 +100,7 @@ export const normalProcessing = (
 		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
 
-	const executeTrigger = createExecuteTrigger(
-		config, 
-		timezone, 
-		staticData, 
-		hourConfigs,
-		emit,
-		helpers,
-		logger
-	);
+	const executeTrigger = createExecuteTrigger(config, timezone, staticData, hourConfigs, emit, helpers, logger);
 
 	try {
 		logger.info('Registering cron job to run every minute for condition checking');

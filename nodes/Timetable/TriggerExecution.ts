@@ -9,29 +9,15 @@ import type {
 	TimetableConfig, 
 	RawHourConfig, 
 	StaticData,
-	NodeHelpers 
+	NodeHelpers
 } from './SchedulerInterface';
 
 /**
  * Create the execution trigger function that will be called by the cron scheduler
- * @param config - Timetable configuration with hour configs
- * @param timezone - Target timezone for execution
- * @param staticData - Workflow static data for tracking last trigger time
- * @param hourConfigs - Raw hour configurations for result data
- * @param emit - Function to emit workflow data
- * @param helpers - Node helpers for data transformation
- * @param logger - Logger instance for debugging and info
+ * @param params - Object containing all required parameters
  * @returns Function that handles the trigger execution logic
  */
-export const createExecuteTrigger = (
-	config: TimetableConfig, 
-	timezone: string, 
-	staticData: StaticData, 
-	hourConfigs: RawHourConfig[],
-	emit: (data: any) => void,
-	helpers: NodeHelpers,
-	logger: any
-) => {
+export const createExecuteTrigger = (config: TimetableConfig, timezone: string, staticData: StaticData, hourConfigs: RawHourConfig[], emit: (data: any) => void, helpers: NodeHelpers, logger: any) => {
 	return () => {
 		try {
 			const currentTime = moment.tz(timezone).toDate();
