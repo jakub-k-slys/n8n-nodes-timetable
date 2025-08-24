@@ -84,6 +84,17 @@ This implements the n8n trigger node pattern:
 - Emits workflow data via `this.emit()`
 - Supports manual execution mode for testing
 
+**Refactored Architecture (v2024):**
+- **One-line delegation**: The `trigger()` method is now a single line that delegates to appropriate helpers based on `this.getMode()`
+- **Separated processing paths**: 
+  - `manualProcessing()` - Handles immediate manual trigger execution
+  - `normalProcessing()` - Handles scheduled trigger registration and configuration
+- **Common utilities**: 
+  - `createSimpleResultData()` - Standardized result object creation for manual triggers
+  - `createResultData()` - Full result object creation for scheduled triggers
+- **Integrated logging**: Replaced custom `TimetableLogger` with native `this.logger` for consistent n8n logging
+- **Comprehensive testing**: Added full unit test coverage for both manual and normal trigger modes
+
 ### Data Output Format
 The trigger outputs structured data including:
 - ISO timestamp

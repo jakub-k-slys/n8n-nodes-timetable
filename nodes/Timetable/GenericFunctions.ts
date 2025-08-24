@@ -1,10 +1,8 @@
 import moment from 'moment-timezone';
 import { randomInt } from 'n8n-workflow';
 
-import type { TimetableConfig, NextSlotResult, NextRunTime, DayOfWeek, RawHourConfig } from './SchedulerInterface';
-
-// Helper function to map day of week string to JavaScript day number (0=Sunday, 1=Monday, etc.)
-function dayStringToNumber(day: DayOfWeek): number | null {
+import type { NextSlotResult, NextRunTime, DayOfWeek, HourConfig } from './SchedulerInterface';
+const dayStringToNumber = (day: DayOfWeek): number | null => {
 	switch (day) {
 		case 'SUN': return 0;
 		case 'MON': return 1;
@@ -13,50 +11,29 @@ function dayStringToNumber(day: DayOfWeek): number | null {
 		case 'THU': return 4;
 		case 'FRI': return 5;
 		case 'SAT': return 6;
-		case 'ALL': return null; // null means all days
+		case 'ALL': return null;
 		default: return null;
 	}
-}
-
-// Helper function to check if a date matches the specified day of week
-function matchesDay(date: Date, dayOfWeek?: DayOfWeek): boolean {
+};
+const matchesDay = (date: Date, dayOfWeek?: DayOfWeek): boolean => {
 	if (!dayOfWeek || dayOfWeek === 'ALL') {
 		return true;
 	}
 	const dayNumber = dayStringToNumber(dayOfWeek);
 	return dayNumber !== null && date.getDay() === dayNumber;
-}
+};
 
-export function getNextSlotHour(now: Date, config: TimetableConfig): NextSlotResult {
+export const getNextSlotHour = (now: Date, hourConfigs: HourConfig[]): NextSlotResult => {
 	const currentHour = now.getHours();
-	
-	// Support both new hourConfigs and legacy fixedHours
-	const hourConfigs = config.hourConfigs || [];
-	
-	// If using legacy mode, convert to hourConfigs format
-	if (!config.hourConfigs && config.fixedHours) {
-		const legacyConfigs = config.fixedHours.map(hour => ({
-			hour,
-			minuteMode: 'random' as const,
-			dayOfWeek: 'ALL' as DayOfWeek
-		}));
-		return getNextSlotHour(now, { hourConfigs: legacyConfigs });
-	}
-	
-	// Find valid slots for today
 	const todaySlots = hourConfigs
 		.filter(hc => matchesDay(now, hc.dayOfWeek))
 		.map(hc => hc.hour)
 		.sort((a, b) => a - b);
-	
-	// Check if there's a slot later today
 	for (const hour of todaySlots) {
 		if (currentHour < hour) {
 			return { hour, isTomorrow: false };
 		}
 	}
-	
-	// Find next available slot starting from tomorrow
 	for (let daysAhead = 1; daysAhead <= 7; daysAhead++) {
 		const futureDate = new Date(now);
 		futureDate.setDate(futureDate.getDate() + daysAhead);
@@ -84,33 +61,19 @@ export function getNextSlotHour(now: Date, config: TimetableConfig): NextSlotRes
 	throw new Error('No valid time slots configured');
 }
 
-export function getNextRunTime(now: Date, config: TimetableConfig): NextRunTime {
-	const { hour } = getNextSlotHour(now, config);
-	
-	let minute = 0;
-	
-	// Handle per-hour minute configuration
-	if (config.hourConfigs) {
-		const hourConfig = config.hourConfigs.find(hc => hc.hour === hour);
-		if (hourConfig) {
-			if (hourConfig.minuteMode === 'specific') {
-				minute = hourConfig.minute ?? 0;
-			} else {
-				// Random mode: generate random minute between 0-59
-				minute = randomInt(0, 60);
-			}
-		}
+export const getNextRunTime = (now: Date, hourConfigs: HourConfig[]): NextRunTime => {
+	const { hour } = getNextSlotHour(now, hourConfigs);
+
+	const hourConfig = hourConfigs.find(hc => hc.hour === hour)!;
+	let minute: number;
+	if (hourConfig?.minute === 'random') {
+		minute = randomInt(0, 60);
 	} else {
-		// Legacy support
-		if (config.randomizeMinutes) {
-			const minMinute = config.minMinute ?? 0;
-			const maxMinute = config.maxMinute ?? 59;
-			minute = randomInt(minMinute, maxMinute + 1);
-		}
+		minute = hourConfig?.minute ?? 0;
 	}
 
 	// Calculate the actual next run date considering day-specific scheduling
-	const nextRun = findNextValidDate(now, hour, config);
+	const nextRun = findNextValidDate(now, hour, hourConfigs);
 	nextRun.setHours(hour, minute, 0, 0);
 	
 	return {
@@ -120,18 +83,7 @@ export function getNextRunTime(now: Date, config: TimetableConfig): NextRunTime 
 }
 
 // Helper function to find the next valid date for a given hour considering day constraints
-function findNextValidDate(now: Date, targetHour: number, config: TimetableConfig): Date {
-	const hourConfigs = config.hourConfigs || [];
-	
-	// If using legacy mode, any day is valid
-	if (!config.hourConfigs && config.fixedHours) {
-		const nextRun = new Date(now);
-		if (now.getHours() >= targetHour) {
-			nextRun.setDate(nextRun.getDate() + 1);
-		}
-		return nextRun;
-	}
-	
+const findNextValidDate = (now: Date, targetHour: number, hourConfigs: HourConfig[]): Date => {
 	// Find the hour config that matches our target hour
 	const relevantConfigs = hourConfigs.filter(hc => hc.hour === targetHour);
 	
@@ -160,11 +112,11 @@ function findNextValidDate(now: Date, targetHour: number, config: TimetableConfi
 	return fallback;
 }
 
-export function shouldTriggerAtTime(
+export const shouldTriggerAtTime = (
 	currentTime: Date,
 	lastTriggerTime: number | undefined,
-	config: TimetableConfig
-): boolean {
+	hourConfigs: HourConfig[]
+): boolean => {
 	const currentHour = currentTime.getHours();
 	const currentTimeUtc = new Date(currentTime.getTime());
 	
@@ -172,19 +124,15 @@ export function shouldTriggerAtTime(
 	console.log(`[shouldTriggerAtTime] Current time: ${currentTimeUtc.toISOString()} (Hour: ${currentHour}, Day: ${currentTime.toLocaleDateString('en-US', {weekday: 'short'})})`);
 	
 	// Check if current hour and day match any configured slots
-	const matchingConfigs = config.hourConfigs ? 
-		config.hourConfigs.filter(hc => 
-			hc.hour === currentHour && matchesDay(currentTime, hc.dayOfWeek)
-		) : [];
+	const matchingConfigs = hourConfigs.filter(hc => 
+		hc.hour === currentHour && matchesDay(currentTime, hc.dayOfWeek)
+	);
 	
-	const hasValidSlot = config.hourConfigs ? 
-		matchingConfigs.length > 0 : 
-		(config.fixedHours || []).includes(currentHour);
+	const hasValidSlot = matchingConfigs.length > 0;
 	
 	console.log(`[shouldTriggerAtTime] Matching hour configs:`, matchingConfigs.map(hc => ({
 		hour: hc.hour,
 		dayOfWeek: hc.dayOfWeek,
-		minuteMode: hc.minuteMode,
 		minute: hc.minute
 	})));
 	
@@ -193,12 +141,12 @@ export function shouldTriggerAtTime(
 		console.log(`[shouldTriggerAtTime] Calculated trigger times for current hour ${currentHour}:`);
 		matchingConfigs.forEach((hc, index) => {
 			let calculatedMinute: number;
-			if (hc.minuteMode === 'specific') {
-				calculatedMinute = hc.minute ?? 0;
-				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (specific minute)`);
-			} else {
+			if (hc.minute === 'random') {
 				calculatedMinute = randomInt(0, 60);
 				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (random minute 0-59)`);
+			} else {
+				calculatedMinute = hc.minute ?? 0;
+				console.log(`[shouldTriggerAtTime]   Config ${index + 1}: ${currentHour.toString().padStart(2, '0')}:${calculatedMinute.toString().padStart(2, '0')} (specific minute)`);
 			}
 			
 			// Show the full UTC timestamp for this calculated time
@@ -239,14 +187,14 @@ export function shouldTriggerAtTime(
 	return true;
 }
 
-export function shouldTriggerNow(
+export const shouldTriggerNow = (
 	lastTriggerTime: number | undefined,
-	config: TimetableConfig,
+	config: HourConfig[],
 	timezone: string
-): boolean {
+): boolean => {
 	const now = moment.tz(timezone).toDate();
 	return shouldTriggerAtTime(now, lastTriggerTime, config);
-}
+};
 
 // Centralized logging service for consistent debug output
 export class TimetableLogger {
@@ -298,13 +246,13 @@ export class TimetableLogger {
 	}
 }
 
-export function createResultData(
+export const createResultData = (
 	momentTz: moment.Moment,
 	timezone: string,
-	hourConfigs: RawHourConfig[],
+	hourConfigs: HourConfig[],
 	nextRun: NextRunTime,
 	isManual: boolean
-) {
+) => {
 	return {
 		timestamp: momentTz.toISOString(true),
 		'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
@@ -325,6 +273,27 @@ export function createResultData(
 		'Next scheduled': nextRun.candidate.toISOString(),
 		'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
 		'Manual execution': isManual
+	};
+}
+
+export const createSimpleResultData = (
+	momentTz: moment.Moment,
+	timezone: string
+) => {
+	return {
+		timestamp: momentTz.toISOString(true),
+		'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+		'Readable time': momentTz.format('h:mm:ss a'),
+		'Manual execution': true,
+		year: momentTz.year(),
+		month: momentTz.month() + 1,
+		day: momentTz.date(),
+		hour: momentTz.hour(),
+		minute: momentTz.minute(),
+		second: momentTz.second(),
+		dayOfWeek: momentTz.day(),
+		weekday: momentTz.format('dddd'),
+		timezone: timezone,
 	};
 }
 

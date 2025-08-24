@@ -16,17 +16,18 @@ import {
 	getNextRunTime, 
 	shouldTriggerAtTime
 } from '../../nodes/Timetable/GenericFunctions';
-import type { TimetableConfig } from '../../nodes/Timetable/SchedulerInterface';
+import type { HourConfig } from '../../nodes/Timetable/SchedulerInterface';
 
 describe('getNextSlotHour', () => {
 	it('should return next available slot within the same day', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21]
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextSlotHour(now, config);
+		const result = getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -36,12 +37,13 @@ describe('getNextSlotHour', () => {
 
 	it('should return next available slot later in the day', () => {
 		const now = new Date('2024-01-01T14:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21]
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextSlotHour(now, config);
+		const result = getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 16,
@@ -51,12 +53,13 @@ describe('getNextSlotHour', () => {
 
 	it('should return first slot of tomorrow when all today slots have passed', () => {
 		const now = new Date('2024-01-01T22:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21]
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextSlotHour(now, config);
+		const result = getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -66,12 +69,11 @@ describe('getNextSlotHour', () => {
 
 	it('should handle single fixed hour', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [15]
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 15, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextSlotHour(now, config);
+		const result = getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 15,
@@ -89,32 +91,28 @@ describe('getNextRunTime', () => {
 		});
 	});
 
-	it('should return next run time without randomization', () => {
+	it('should return next run time with specific minute', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21],
-			randomizeMinutes: false
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 15, dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 30, dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextRunTime(now, config);
+		const result = getNextRunTime(now, hourConfigs);
 		
 		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(0);
+		expect(result.candidate.getMinutes()).toBe(15);
 		expect(result.candidate.getDate()).toBe(1); // Same day
 	});
 
 	it('should return next run time with randomization', () => {
 		const now = new Date('2024-01-01T10:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21],
-			randomizeMinutes: true,
-			minMinute: 0,
-			maxMinute: 59
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextRunTime(now, config);
+		const result = getNextRunTime(now, hourConfigs);
 		
 		expect(result.candidate.getHours()).toBe(12);
 		expect(result.candidate.getMinutes()).toBe(30); // Mock value
@@ -123,62 +121,40 @@ describe('getNextRunTime', () => {
 
 	it('should return next run time for tomorrow', () => {
 		const now = new Date('2024-01-01T22:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21],
-			randomizeMinutes: false
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 12, minute: 0, dayOfWeek: 'ALL' },
+			{ hour: 16, minute: 0, dayOfWeek: 'ALL' }
+		];
 		
-		const result = getNextRunTime(now, config);
+		const result = getNextRunTime(now, hourConfigs);
 		
 		expect(result.candidate.getHours()).toBe(12);
 		expect(result.candidate.getMinutes()).toBe(0);
 		expect(result.candidate.getDate()).toBe(2); // Next day
 	});
-
-	it('should respect minute range limits', () => {
-		const mockRandomInt = n8nWorkflow.randomInt as jest.Mock;
-		mockRandomInt.mockReturnValue(45);
-		
-		const now = new Date('2024-01-01T10:00:00Z');
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [12, 16, 21],
-			randomizeMinutes: true,
-			minMinute: 30,
-			maxMinute: 50
-		};
-		
-		getNextRunTime(now, config);
-		
-		expect(mockRandomInt).toHaveBeenCalledWith(30, 51); // maxMinute + 1
-	});
 });
 
 describe('shouldTriggerAtTime', () => {
-	it('should return false when current hour is not in fixed hours', () => {
+	it('should return false when current hour is not configured', () => {
 		const currentTime = new Date('2024-01-01T10:30:00Z'); // 10:30 AM
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [16, 21], // 4pm, 9pm - doesn't include 10am
-			randomizeMinutes: true
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' },
+			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = shouldTriggerAtTime(currentTime, undefined, config);
+		const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 		
 		expect(result).toBe(false);
 	});
 
 	it('should return true for first trigger when hour matches', () => {
-		const currentTime = new Date('2024-01-01T12:30:00Z'); // This will be hour 13 in my timezone
+		const currentTime = new Date('2024-01-01T12:30:00Z'); // This will be hour 12
 		const actualHour = currentTime.getHours();
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [actualHour], // Use the actual hour that JS will interpret
-			randomizeMinutes: true
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: actualHour, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
-		const result = shouldTriggerAtTime(currentTime, undefined, config);
+		const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -186,16 +162,14 @@ describe('shouldTriggerAtTime', () => {
 	it('should prevent multiple triggers in the same hour', () => {
 		const currentTime = new Date('2024-01-01T12:30:00Z');
 		const actualHour = currentTime.getHours();
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [actualHour], // Use actual hour
-			randomizeMinutes: true
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: actualHour, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
 		// Last trigger was 10 minutes ago in the same hour
 		const lastTriggerTime = currentTime.getTime() - (10 * 60 * 1000);
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(false);
 	});
@@ -203,16 +177,14 @@ describe('shouldTriggerAtTime', () => {
 	it('should allow trigger after sufficient time has passed', () => {
 		const currentTime = new Date('2024-01-01T12:30:00Z');
 		const actualHour = currentTime.getHours();
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [actualHour], // Use actual hour
-			randomizeMinutes: true
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: actualHour, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
 		// Last trigger was more than 1 hour ago
 		const lastTriggerTime = currentTime.getTime() - (2 * 60 * 60 * 1000);
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -220,18 +192,16 @@ describe('shouldTriggerAtTime', () => {
 	it('should allow trigger in different hour even if less than 1 hour passed', () => {
 		const currentTime = new Date('2024-01-01T16:10:00Z');
 		const actualCurrentHour = currentTime.getHours();
-		const config: TimetableConfig = {
-			hourConfigs: undefined as any,
-			fixedHours: [actualCurrentHour], // Use actual current hour
-			randomizeMinutes: true
-		};
+		const hourConfigs: HourConfig[] = [
+			{ hour: actualCurrentHour, minute: 'random', dayOfWeek: 'ALL' }
+		];
 		
 		// Create a time that's in a different hour but less than 1 hour ago
 		const earlierTime = new Date(currentTime);
 		earlierTime.setHours(actualCurrentHour - 1); // Previous hour
 		const lastTriggerTime = earlierTime.getTime();
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, config);
+		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -242,13 +212,11 @@ describe('Day-specific scheduling', () => {
 	describe('getNextSlotHour with day constraints', () => {
 		it('should find next Monday slot when today is Sunday', () => {
 			const now = new Date('2024-01-07T10:00:00Z'); // Sunday
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'MON' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'MON' }
+			];
 			
-			const result = getNextSlotHour(now, config);
+			const result = getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -258,13 +226,11 @@ describe('Day-specific scheduling', () => {
 
 		it('should find slot later today when day matches', () => {
 			const now = new Date('2024-01-01T10:00:00Z'); // Monday
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'MON' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'MON' }
+			];
 			
-			const result = getNextSlotHour(now, config);
+			const result = getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -274,13 +240,11 @@ describe('Day-specific scheduling', () => {
 
 		it('should skip days that dont match', () => {
 			const now = new Date('2024-01-01T10:00:00Z'); // Monday
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'FRI' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
+			];
 			
-			const result = getNextSlotHour(now, config);
+			const result = getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -290,13 +254,11 @@ describe('Day-specific scheduling', () => {
 
 		it('should handle ALL day configuration', () => {
 			const now = new Date('2024-01-01T10:00:00Z');
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'ALL' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'ALL' }
+			];
 			
-			const result = getNextSlotHour(now, config);
+			const result = getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -308,39 +270,33 @@ describe('Day-specific scheduling', () => {
 	describe('shouldTriggerAtTime with day constraints', () => {
 		it('should not trigger on wrong day', () => {
 			const currentTime = new Date('2024-01-01T14:30:00Z'); // Monday
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'FRI' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
+			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, config);
+			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(false);
 		});
 
 		it('should trigger on correct day and hour', () => {
 			const currentTime = new Date('2024-01-05T14:30:00'); // Friday (local time)
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'FRI' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
+			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, config);
+			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(true);
 		});
 
 		it('should trigger on ALL day configuration', () => {
 			const currentTime = new Date('2024-01-03T14:30:00'); // Wednesday (local time)
-			const config: TimetableConfig = {
-				hourConfigs: [
-					{ hour: 14, minuteMode: 'random', dayOfWeek: 'ALL' }
-				]
-			};
+			const hourConfigs: HourConfig[] = [
+				{ hour: 14, minute: 'random', dayOfWeek: 'ALL' }
+			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, config);
+			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(true);
 		});
