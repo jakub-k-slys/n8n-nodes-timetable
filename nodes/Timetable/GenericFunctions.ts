@@ -328,3 +328,24 @@ export function createResultData(
 	};
 }
 
+export function createSimpleResultData(
+	momentTz: moment.Moment,
+	timezone: string
+) {
+	return {
+		timestamp: momentTz.toISOString(true),
+		'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
+		'Readable time': momentTz.format('h:mm:ss a'),
+		'Manual execution': true,
+		year: momentTz.year(),
+		month: momentTz.month() + 1,
+		day: momentTz.date(),
+		hour: momentTz.hour(),
+		minute: momentTz.minute(),
+		second: momentTz.second(),
+		dayOfWeek: momentTz.day(),
+		weekday: momentTz.format('dddd'),
+		timezone: timezone,
+	};
+}
+

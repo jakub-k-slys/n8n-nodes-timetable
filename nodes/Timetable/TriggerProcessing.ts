@@ -1,0 +1,147 @@
+/**
+ * Manual and normal trigger processing helpers for the Timetable Trigger node
+ */
+
+import moment from 'moment-timezone';
+import { NodeOperationError } from 'n8n-workflow';
+import type { ITriggerResponse } from 'n8n-workflow';
+
+import { getNextRunTime, createSimpleResultData } from './GenericFunctions';
+import { parseAndValidateConfig } from './ConfigValidation';
+import { createExecuteTrigger } from './TriggerExecution';
+
+import type { 
+	TimetableConfig, 
+	RawHourConfig, 
+	RawTriggerHoursData,
+	StaticData,
+	NodeHelpers
+} from './SchedulerInterface';
+
+/**
+ * Helper function for manual processing mode
+ * Handles immediate manual trigger execution without configuration processing
+ * @param getTimezone - Function to get current timezone
+ * @param emit - Function to emit workflow data
+ * @param helpers - Node helpers for data transformation
+ * @param logger - Logger instance for debugging and info
+ * @returns ITriggerResponse with manual trigger function
+ */
+export function manualProcessing(
+	getTimezone: () => string,
+	emit: (data: any) => void,
+	helpers: NodeHelpers,
+	logger: any
+): ITriggerResponse {
+	const timezone = getTimezone();
+	const momentTz = moment.tz(timezone);
+	
+	logger.info(`✓ MANUAL EXECUTION at ${moment.utc(momentTz.toDate()).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+	logger.info(`Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
+	
+	const manualTriggerFunction = () => {
+		const resultData = createSimpleResultData(momentTz, timezone);
+		emit([helpers.returnJsonArray([resultData])]);
+		return Promise.resolve();
+	};
+
+	return { manualTriggerFunction };
+}
+
+/**
+ * Helper function for normal processing mode
+ * Handles scheduled trigger registration and configuration processing
+ * @param getNodeParameter - Function to get node parameters
+ * @param getTimezone - Function to get current timezone
+ * @param getWorkflowStaticData - Function to get workflow static data
+ * @param getNode - Function to get current node
+ * @param emit - Function to emit workflow data
+ * @param helpers - Node helpers for data transformation
+ * @param registerCron - Function to register cron job
+ * @param logger - Logger instance for debugging and info
+ * @returns ITriggerResponse (empty object for normal mode)
+ * @throws NodeOperationError if configuration is invalid or cron registration fails
+ */
+export function normalProcessing(
+	getNodeParameter: any,
+	getTimezone: () => string,
+	getWorkflowStaticData: any,
+	getNode: any,
+	emit: (data: any) => void,
+	helpers: NodeHelpers,
+	registerCron: any,
+	logger: any
+): ITriggerResponse {
+	const triggerHoursData = getNodeParameter('triggerHours', {
+		hours: [
+			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
+		]
+	}) as RawTriggerHoursData;
+	
+	const timezone = getTimezone();
+	const staticData = getWorkflowStaticData('node') as StaticData;
+
+	let hourConfigs: RawHourConfig[];
+	try {
+		hourConfigs = parseAndValidateConfig(triggerHoursData, getNode);
+	} catch (error) {
+		throw new NodeOperationError(
+			getNode(),
+			`Invalid trigger hours configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			{
+				description: 'Please add at least one trigger hour using the dropdown menu',
+			}
+		);
+	}
+
+	const config: TimetableConfig = {
+		hourConfigs: hourConfigs.map(item => ({
+			hour: item.hour,
+			minute: item.minute === 'random' ? undefined : Number(item.minute),
+			minuteMode: item.minute === 'random' ? 'random' : 'specific',
+			dayOfWeek: item.dayOfWeek as any
+		}))
+	};
+
+	const logConfigs = config.hourConfigs.map(hc => ({
+		hour: hc.hour,
+		minute: hc.minute ?? 'random',
+		dayOfWeek: hc.dayOfWeek,
+		minuteMode: hc.minuteMode
+	}));
+	
+	try {
+		const nowForNext = moment.tz(timezone).toDate();
+		const nextRun = getNextRunTime(nowForNext, config);
+		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
+		logger.info(`Timezone: ${timezone}`);
+		logger.info(`Hour configs: ${JSON.stringify(logConfigs)}`);
+		logger.info(`Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
+	} catch (error) {
+		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
+		logger.info(`Timezone: ${timezone}`);
+		logger.info(`Hour configs: ${JSON.stringify(logConfigs)}`);
+		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+	}
+
+	const executeTrigger = createExecuteTrigger(
+		config, 
+		timezone, 
+		staticData, 
+		hourConfigs,
+		emit,
+		helpers,
+		logger
+	);
+
+	try {
+		logger.info('Registering cron job to run every minute for condition checking');
+		registerCron('* * * * * *' as any, executeTrigger);
+	} catch (error) {
+		throw new NodeOperationError(
+			getNode(),
+			`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
+		);
+	}
+	return {};
+}
