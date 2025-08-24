@@ -95,7 +95,7 @@ describe('TimetableTrigger', () => {
 			const result = await timetableTrigger.trigger.call(mockContext as ITriggerFunctions);
 
 			expect(mockContext.getMode).toHaveBeenCalledTimes(1);
-			expect(mockContext.getNodeParameter).toHaveBeenCalledWith('triggerHours', {
+			expect(mockContext.getNodeParameter).toHaveBeenCalledWith('triggerSlots', {
 				hours: [
 					{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
 				]
@@ -137,7 +137,7 @@ describe('TimetableTrigger', () => {
 
 			await expect(
 				timetableTrigger.trigger.call(mockContext as ITriggerFunctions)
-			).rejects.toThrow('Invalid trigger hours configuration');
+			).rejects.toThrow('At least one valid hour must be selected');
 		});
 
 		it('should handle multiple hour configurations', async () => {

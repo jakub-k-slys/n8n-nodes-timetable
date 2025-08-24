@@ -36,7 +36,7 @@ export class TimetableTrigger implements INodeType {
 			},
 			{
 				displayName: 'Trigger Hours',
-				name: 'triggerHours',
+				name: 'triggerSlots',
 				type: 'fixedCollection',
 				default: {
 					hours: [

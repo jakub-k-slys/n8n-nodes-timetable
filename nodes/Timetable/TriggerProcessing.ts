@@ -7,16 +7,17 @@ import { NodeOperationError } from 'n8n-workflow';
 import type { ITriggerResponse } from 'n8n-workflow';
 
 import { getNextRunTime, createSimpleResultData } from './GenericFunctions';
-import { parseAndValidateConfig } from './ConfigValidation';
 import { createExecuteTrigger } from './TriggerExecution';
 
-import type { 
-	TimetableConfig, 
-	RawHourConfig, 
-	RawTriggerHoursData,
+import {
+	TimetableConfig,
+	RawHourConfig,
+	TriggerSlots,
 	StaticData,
-	NodeHelpers
+	NodeHelpers, DefaultTriggerSlots, TriggerSlotsCodec,
 } from './SchedulerInterface';
+import { isRight } from 'fp-ts/Either';
+import { PathReporter } from 'io-ts/PathReporter';
 
 /**
  * Helper function for manual processing mode
@@ -48,27 +49,37 @@ export const manualProcessing = (getTimezone: () => string, emit: (data: any) =>
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
 export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, emit: (data: any) => void, helpers: NodeHelpers, registerCron: any, logger: any): ITriggerResponse => {
-	const triggerHoursData = getNodeParameter('triggerHours', {
-		hours: [
-			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
-		]
-	}) as RawTriggerHoursData;
-	
+	const triggerSlots = getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
+
 	const timezone = getTimezone();
 	const staticData = getWorkflowStaticData('node') as StaticData;
+	const validation = TriggerSlotsCodec.decode(triggerSlots);
 
-	let hourConfigs: RawHourConfig[];
-	try {
-		hourConfigs = parseAndValidateConfig(triggerHoursData, getNode);
-	} catch (error) {
+	if (!isRight(validation)) {
+		const errors = PathReporter.report(validation).join('; ');
 		throw new NodeOperationError(
 			getNode(),
-			`Invalid trigger hours configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			`Invalid trigger configuration: ${errors}`,
 			{
-				description: 'Please add at least one trigger hour using the dropdown menu',
+				description: 'Please check your hour selections, minute values (must be "random" or 0-59), and day of week settings'
 			}
 		);
 	}
+
+	const { hours } = validation.right;
+
+	if (hours.length === 0) {
+		throw new NodeOperationError(
+			getNode(),
+			'At least one valid hour must be selected',
+			{
+				description: 'Please add at least one trigger hour using the dropdown menu'
+			}
+		);
+	}
+
+	// Sort by hour for consistent ordering
+	let hourConfigs: RawHourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
 
 	const config: TimetableConfig = {
 		hourConfigs: hourConfigs.map(item => ({
