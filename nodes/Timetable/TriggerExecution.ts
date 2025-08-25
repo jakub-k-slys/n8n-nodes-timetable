@@ -16,8 +16,8 @@ import type {
  * @param params - Object containing all required parameters
  * @returns Function that handles the trigger execution logic
  */
-export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: StaticData, emit: (data: any) => void, helpers: NodeHelpers, logger: any) => {
-	return () => {
+export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: StaticData, helpers: NodeHelpers, logger: any) => {
+	return (emitCallback: (data: any) => void) => {
 		try {
 			const currentTime = moment.tz(timezone).toDate();
 			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, hourConfigs, timezone);
@@ -45,10 +45,9 @@ export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string
 				const momentTz = moment.tz(timezone);
 				const nextRun = getNextRunTime(momentTz.toDate(), hourConfigs);
 				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
-				emit([helpers.returnJsonArray([resultData])]);
+				emitCallback([helpers.returnJsonArray([resultData])]);
 			} catch (error) {
 				logger.error(`Error creating workflow output: ${error instanceof Error ? error.message : 'Unknown error'}`);
-				// Emit minimal data without next run time to ensure workflow still executes
 				const momentTz = moment.tz(timezone);
 				const fallbackData = { 
 					timestamp: momentTz.toISOString(true),
@@ -57,7 +56,7 @@ export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string
 					'Manual execution': false,
 					error: 'Failed to compute next run time - workflow executed with fallback data'
 				};
-				emit([helpers.returnJsonArray([fallbackData])]);
+				emitCallback([helpers.returnJsonArray([fallbackData])]);
 			}
 		} catch (error) {
 			logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);

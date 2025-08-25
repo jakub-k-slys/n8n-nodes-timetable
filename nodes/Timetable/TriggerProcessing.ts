@@ -4,7 +4,6 @@
 
 import moment from 'moment-timezone';
 import { NodeOperationError } from 'n8n-workflow';
-import type { ITriggerResponse } from 'n8n-workflow';
 import { getNextRunTime, createSimpleResultData } from './GenericFunctions';
 import { createExecuteTrigger } from './TriggerExecution';
 import {
@@ -42,7 +41,7 @@ export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers
  * @returns ITriggerResponse (empty object for normal mode)
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
-export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, emit: (data: any) => void, helpers: NodeHelpers, registerCron: any, logger: any): ITriggerResponse => {
+export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, helpers: NodeHelpers, registerCron: any, logger: any) => {
 	const triggerSlots = getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
 
 	const timezone = getTimezone();
@@ -89,16 +88,7 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
 
-	const executeTrigger = createExecuteTrigger(hourConfigs, timezone, staticData, emit, helpers, logger);
+	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, helpers, logger);
 
-	try {
-		logger.info('Registering cron job to run every minute for condition checking');
-		registerCron('* * * * *' as any, executeTrigger);
-	} catch (error) {
-		throw new NodeOperationError(
-			getNode(),
-			`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`,
-		);
-	}
-	return {};
+	return { createTriggerFunction, registerCron, logger };
 }
