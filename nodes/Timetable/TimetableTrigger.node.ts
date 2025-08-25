@@ -8,6 +8,7 @@ import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
 import { generateHourOptions } from './HourOptionsUtils';
 import { manualProcessing, normalProcessing } from './TriggerProcessing';
+import { createTimetableLogger } from './LoggingHelpers';
 
 export class TimetableTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -137,11 +138,12 @@ export class TimetableTrigger implements INodeType {
 			return { manualTriggerFunction };
 		} else {
 			const { createTriggerFunction, registerCron, logger } = normalProcessing(this.getNodeParameter.bind(this), this.getTimezone.bind(this), this.getWorkflowStaticData.bind(this), this.getNode.bind(this), this.helpers, this.helpers.registerCron.bind(this.helpers), this.logger);
+			const timetableLogger = createTimetableLogger(logger);
 			
 			const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
 			
 			try {
-				logger.info('Registering cron job to run every minute for condition checking');
+				timetableLogger.logCronRegistration();
 				registerCron('* * * * *' as any, executeTrigger);
 			} catch (error) {
 				throw new NodeOperationError(

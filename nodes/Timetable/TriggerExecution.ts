@@ -4,6 +4,7 @@
 
 import moment from 'moment-timezone';
 import { shouldTriggerNow, getNextRunTime, createResultData } from './GenericFunctions';
+import { createTimetableLogger } from './LoggingHelpers';
 
 import type {
 	HourConfig,
@@ -17,28 +18,26 @@ import type {
  * @returns Function that handles the trigger execution logic
  */
 export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: StaticData, helpers: NodeHelpers, logger: any) => {
+	const timetableLogger = createTimetableLogger(logger);
+	
 	return (emitCallback: (data: any) => void) => {
 		try {
 			const currentTime = moment.tz(timezone).toDate();
 			const shouldTrigger = shouldTriggerNow(staticData.lastTriggerTime, hourConfigs, timezone);
 			
-			const currentTimeUtc = moment.utc(currentTime);
-			logger.debug(`Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
-			logger.debug(`Current time in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
-			logger.debug(`Last trigger time: ${staticData.lastTriggerTime ? new Date(staticData.lastTriggerTime).toISOString() : 'never'}`);
-			logger.debug(`Should trigger: ${shouldTrigger}`);
+			timetableLogger.logTriggerCheck(currentTime, timezone, staticData.lastTriggerTime, shouldTrigger);
 			
 			if (!shouldTrigger) {
 				try {
 					const nextRun = getNextRunTime(currentTime, hourConfigs);
-					logger.debug(`Not triggering. Next scheduled: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+					timetableLogger.logSkipTrigger(nextRun);
 				} catch (error) {
-					logger.error(`Error computing next run time for skip: ${error instanceof Error ? error.message : 'Unknown error'}`);
+					timetableLogger.logSkipTriggerError(error);
 				}
 				return;
 			}
 
-			logger.info(`✓ TRIGGERING WORKFLOW at ${moment.utc(currentTime).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+			timetableLogger.logWorkflowTrigger(currentTime);
 			staticData.lastTriggerTime = Date.now();
 			
 			try {
@@ -47,7 +46,7 @@ export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string
 				const resultData = createResultData(momentTz, timezone, hourConfigs, nextRun, false);
 				emitCallback([helpers.returnJsonArray([resultData])]);
 			} catch (error) {
-				logger.error(`Error creating workflow output: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				timetableLogger.logWorkflowOutputError(error);
 				const momentTz = moment.tz(timezone);
 				const fallbackData = { 
 					timestamp: momentTz.toISOString(true),
@@ -59,7 +58,7 @@ export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string
 				emitCallback([helpers.returnJsonArray([fallbackData])]);
 			}
 		} catch (error) {
-			logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			timetableLogger.logExecutionTriggerError(error);
 		}
 	};
 };
