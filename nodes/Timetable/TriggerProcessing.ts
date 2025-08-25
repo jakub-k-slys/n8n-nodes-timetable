@@ -22,20 +22,17 @@ import { PathReporter } from 'io-ts/PathReporter';
  * @param params - Object containing all required parameters
  * @returns ITriggerResponse with manual trigger function
  */
-export const manualProcessing = (getTimezone: () => string, emit: (data: any) => void, helpers: NodeHelpers, logger: any): ITriggerResponse => {
+export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers, logger: any) => {
 	const timezone = getTimezone();
 	const momentTz = moment.tz(timezone);
 	
 	logger.info(`✓ MANUAL EXECUTION at ${moment.utc(momentTz.toDate()).format('YYYY-MM-DD HH:mm:ss')} UTC`);
 	logger.info(`Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
 	
-	const manualTriggerFunction = () => {
-		const resultData = createSimpleResultData(momentTz, timezone);
-		emit([helpers.returnJsonArray([resultData])]);
-		return Promise.resolve();
-	};
+	const resultData = createSimpleResultData(momentTz, timezone);
+	const emitData = [helpers.returnJsonArray([resultData])];
 
-	return { manualTriggerFunction };
+	return { emitData };
 };
 
 /**
