@@ -4,7 +4,7 @@ import type {
 	INodeTypeDescription,
 	ITriggerResponse,
 } from 'n8n-workflow';
-import { NodeConnectionType } from 'n8n-workflow';
+import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 
 import { generateHourOptions } from './HourOptionsUtils';
 import { manualProcessing, normalProcessing } from './TriggerProcessing';
@@ -135,7 +135,22 @@ export class TimetableTrigger implements INodeType {
 				return Promise.resolve();
 			};
 			return { manualTriggerFunction };
+		} else {
+			const { createTriggerFunction, registerCron, logger } = normalProcessing(this.getNodeParameter.bind(this), this.getTimezone.bind(this), this.getWorkflowStaticData.bind(this), this.getNode.bind(this), this.helpers, this.helpers.registerCron.bind(this.helpers), this.logger);
+			
+			const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
+			
+			try {
+				logger.info('Registering cron job to run every minute for condition checking');
+				registerCron('* * * * *' as any, executeTrigger);
+			} catch (error) {
+				throw new NodeOperationError(
+					this.getNode(),
+					`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+			
+			return {};
 		}
-		return normalProcessing(this.getNodeParameter.bind(this), this.getTimezone.bind(this), this.getWorkflowStaticData.bind(this), this.getNode.bind(this), this.emit.bind(this), this.helpers, this.helpers.registerCron.bind(this.helpers), this.logger);
 	}
 }
