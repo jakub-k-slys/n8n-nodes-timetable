@@ -6,6 +6,7 @@ import moment from 'moment-timezone';
 import { NodeOperationError } from 'n8n-workflow';
 import { getNextRunTime, createSimpleResultData } from './GenericFunctions';
 import { createExecuteTrigger } from './TriggerExecution';
+import { createTimetableLogger } from './LoggingHelpers';
 import {
 	HourConfig,
 	TriggerSlots,
@@ -24,9 +25,9 @@ import { PathReporter } from 'io-ts/PathReporter';
 export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers, logger: any) => {
 	const timezone = getTimezone();
 	const momentTz = moment.tz(timezone);
+	const timetableLogger = createTimetableLogger(logger);
 	
-	logger.info(`✓ MANUAL EXECUTION at ${moment.utc(momentTz.toDate()).format('YYYY-MM-DD HH:mm:ss')} UTC`);
-	logger.info(`Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
+	timetableLogger.logManualExecution(timezone, momentTz);
 	
 	const resultData = createSimpleResultData(momentTz, timezone);
 	const emitData = [helpers.returnJsonArray([resultData])];
@@ -43,6 +44,7 @@ export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers
  */
 export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, helpers: NodeHelpers, registerCron: any, logger: any) => {
 	const triggerSlots = getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
+	const timetableLogger = createTimetableLogger(logger);
 
 	const timezone = getTimezone();
 	const staticData = getWorkflowStaticData('node') as StaticData;
@@ -77,15 +79,9 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 	try {
 		const nowForNext = moment.tz(timezone).toDate();
 		const nextRun = getNextRunTime(nowForNext, hourConfigs);
-		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
-		logger.info(`Timezone: ${timezone}`);
-		logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
-		logger.info(`Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
+		timetableLogger.logConfigurationLoaded(timezone, hourConfigs, nextRun);
 	} catch (error) {
-		logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
-		logger.info(`Timezone: ${timezone}`);
-		logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
-		logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		timetableLogger.logConfigurationError(timezone, hourConfigs, error);
 	}
 
 	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, helpers, logger);
