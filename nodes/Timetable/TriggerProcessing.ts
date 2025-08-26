@@ -10,7 +10,6 @@ import { createTimetableLogger } from './LoggingHelpers';
 import {
 	HourConfig,
 	TriggerSlots,
-	StaticData,
 	DefaultTriggerSlots, TriggerSlotsCodec,
 } from './SchedulerInterface';
 import { isRight } from 'fp-ts/Either';
@@ -47,7 +46,12 @@ export const normalProcessing = (context: any) => {
 	const timetableLogger = createTimetableLogger(context.logger);
 
 	const timezone = context.getTimezone();
-	const staticData = context.getWorkflowStaticData('node') as StaticData;
+	const staticData = context.getWorkflowStaticData('node') as {
+		lastTriggerTime: number;
+	};
+	if (!staticData.lastTriggerTime) {
+		staticData.lastTriggerTime = 0;
+	}
 	const validation = TriggerSlotsCodec.decode(triggerSlots);
 
 	if (!isRight(validation)) {
