@@ -16,7 +16,7 @@ export class TimetableTrigger implements INodeType {
 		name: 'timetableTrigger',
 		icon: 'file:timetableTrigger.svg',
 		group: ['trigger', 'schedule'],
-		version: [1],
+		version: [1, 1.1, 1.2],
 		description: 'Triggers the workflow at user-defined hours with optional minute randomization',
 		eventTriggerDescription: '',
 		activationMessage:
