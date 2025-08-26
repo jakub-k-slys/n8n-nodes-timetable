@@ -109,7 +109,7 @@ describe('TimetableTrigger', () => {
 			await timetableTrigger.trigger.call(mockContext as ITriggerFunctions);
 
 			expect(mockContext.helpers!.registerCron).toHaveBeenCalledWith(
-				'* * * * *',
+				'* * * * * *',
 				expect.any(Function)
 			);
 			expect(mockContext.logger!.info).toHaveBeenCalledWith('Registering cron job to run every minute for condition checking');

@@ -86,5 +86,5 @@ export const normalProcessing = (context: any) => {
 
 	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, context.helpers, context.logger);
 
-	return { createTriggerFunction, registerCron: context.helpers.registerCron, logger: context.logger };
+	return { createTriggerFunction };
 }

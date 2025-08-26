@@ -94,15 +94,15 @@ export class TimetableTrigger implements INodeType {
 										name: 'Wednesday',
 										value: 'WED',
 									},
-																]
+								]
 							},
 							{
-						displayName: 'Hour',
-						name: 'hour',
-						type: 'options',
-						default: '',
-						description: 'Hour when the workflow should trigger (24-hour format)',
-						options: generateHourOptions()
+								displayName: 'Hour',
+								name: 'hour',
+								type: 'options',
+								default: '',
+								description: 'Hour when the workflow should trigger (24-hour format)',
+								options: generateHourOptions()
 							},
 							{
 								displayName: 'Minute',
@@ -136,23 +136,22 @@ export class TimetableTrigger implements INodeType {
 				return Promise.resolve();
 			};
 			return { manualTriggerFunction };
-		} else {
-			const { createTriggerFunction, registerCron, logger } = normalProcessing(this);
-			const timetableLogger = createTimetableLogger(logger);
-			
-			const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
-			
-			try {
-				timetableLogger.logCronRegistration();
-				registerCron('* * * * *' as any, executeTrigger);
-			} catch (error) {
-				throw new NodeOperationError(
-					this.getNode(),
-					`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
-				);
-			}
-			
-			return {};
 		}
+
+		const { createTriggerFunction } = normalProcessing(this);
+		const timetableLogger = createTimetableLogger(this.logger);
+
+		const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
+
+		try {
+			timetableLogger.logCronRegistration();
+			this.helpers.registerCron('* * * * * *', () => executeTrigger());
+		} catch (error) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
+		}
+		return {};
 	}
 }
