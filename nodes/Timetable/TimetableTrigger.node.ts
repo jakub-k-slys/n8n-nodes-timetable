@@ -130,14 +130,14 @@ export class TimetableTrigger implements INodeType {
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		if (this.getMode() === 'manual') {
-			const { emitData } = manualProcessing(this.getTimezone.bind(this), this.helpers, this.logger);
+			const { emitData } = manualProcessing(this);
 			const manualTriggerFunction = () => {
 				this.emit(emitData);
 				return Promise.resolve();
 			};
 			return { manualTriggerFunction };
 		} else {
-			const { createTriggerFunction, registerCron, logger } = normalProcessing(this.getNodeParameter.bind(this), this.getTimezone.bind(this), this.getWorkflowStaticData.bind(this), this.getNode.bind(this), this.helpers, this.helpers.registerCron.bind(this.helpers), this.logger);
+			const { createTriggerFunction, registerCron, logger } = normalProcessing(this);
 			const timetableLogger = createTimetableLogger(logger);
 			
 			const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
