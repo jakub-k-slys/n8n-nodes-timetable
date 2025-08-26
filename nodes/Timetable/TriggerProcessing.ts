@@ -11,7 +11,7 @@ import {
 	HourConfig,
 	TriggerSlots,
 	StaticData,
-	NodeHelpers, DefaultTriggerSlots, TriggerSlotsCodec,
+	DefaultTriggerSlots, TriggerSlotsCodec,
 } from './SchedulerInterface';
 import { isRight } from 'fp-ts/Either';
 import { PathReporter } from 'io-ts/PathReporter';
@@ -22,15 +22,15 @@ import { PathReporter } from 'io-ts/PathReporter';
  * @param params - Object containing all required parameters
  * @returns ITriggerResponse with manual trigger function
  */
-export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers, logger: any) => {
-	const timezone = getTimezone();
+export const manualProcessing = (context: any) => {
+	const timezone = context.getTimezone();
 	const momentTz = moment.tz(timezone);
-	const timetableLogger = createTimetableLogger(logger);
+	const timetableLogger = createTimetableLogger(context.logger);
 	
 	timetableLogger.logManualExecution(timezone, momentTz);
 	
 	const resultData = createSimpleResultData(momentTz, timezone);
-	const emitData = [helpers.returnJsonArray([resultData])];
+	const emitData = [context.helpers.returnJsonArray([resultData])];
 
 	return { emitData };
 };
@@ -42,18 +42,18 @@ export const manualProcessing = (getTimezone: () => string, helpers: NodeHelpers
  * @returns ITriggerResponse (empty object for normal mode)
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
-export const normalProcessing = (getNodeParameter: any, getTimezone: () => string, getWorkflowStaticData: any, getNode: any, helpers: NodeHelpers, registerCron: any, logger: any) => {
-	const triggerSlots = getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
-	const timetableLogger = createTimetableLogger(logger);
+export const normalProcessing = (context: any) => {
+	const triggerSlots = context.getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
+	const timetableLogger = createTimetableLogger(context.logger);
 
-	const timezone = getTimezone();
-	const staticData = getWorkflowStaticData('node') as StaticData;
+	const timezone = context.getTimezone();
+	const staticData = context.getWorkflowStaticData('node') as StaticData;
 	const validation = TriggerSlotsCodec.decode(triggerSlots);
 
 	if (!isRight(validation)) {
 		const errors = PathReporter.report(validation).join('; ');
 		throw new NodeOperationError(
-			getNode(),
+			context.getNode(),
 			`Invalid trigger configuration: ${errors}`,
 			{
 				description: 'Please check your hour selections, minute values (must be "random" or 0-59), and day of week settings'
@@ -65,7 +65,7 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 
 	if (hours.length === 0) {
 		throw new NodeOperationError(
-			getNode(),
+			context.getNode(),
 			'At least one valid hour must be selected',
 			{
 				description: 'Please add at least one trigger hour using the dropdown menu'
@@ -84,7 +84,7 @@ export const normalProcessing = (getNodeParameter: any, getTimezone: () => strin
 		timetableLogger.logConfigurationError(timezone, hourConfigs, error);
 	}
 
-	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, helpers, logger);
+	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, context.helpers, context.logger);
 
-	return { createTriggerFunction, registerCron, logger };
+	return { createTriggerFunction, registerCron: context.helpers.registerCron, logger: context.logger };
 }
