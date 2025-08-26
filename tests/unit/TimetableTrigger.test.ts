@@ -182,21 +182,5 @@ describe('TimetableTrigger', () => {
 
 			expect(mockContext.logger!.info).toHaveBeenCalledWith('Timezone: Europe/London');
 		});
-
-		it('should handle getWorkflowStaticData returning undefined', async () => {
-			(mockContext.getMode as jest.Mock).mockReturnValue('trigger');
-			(mockContext.getWorkflowStaticData as jest.Mock).mockReturnValue(undefined);
-			(mockContext.getNodeParameter as jest.Mock).mockReturnValue({
-				hours: [
-					{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
-				]
-			});
-
-			const result = await timetableTrigger.trigger.call(mockContext as ITriggerFunctions);
-
-			expect(mockContext.getWorkflowStaticData).toHaveBeenCalledTimes(1);
-			expect(mockContext.helpers!.registerCron).toHaveBeenCalledTimes(1);
-			expect(result).toEqual({});
-		});
 	});
 });

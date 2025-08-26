@@ -8,7 +8,6 @@ import { createTimetableLogger } from './LoggingHelpers';
 
 import type {
 	HourConfig,
-	StaticData,
 	NodeHelpers
 } from './SchedulerInterface';
 
@@ -17,7 +16,7 @@ import type {
  * @param params - Object containing all required parameters
  * @returns Function that handles the trigger execution logic
  */
-export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: StaticData, helpers: NodeHelpers, logger: any) => {
+export const createExecuteTrigger = (hourConfigs: HourConfig[], timezone: string, staticData: any, helpers: NodeHelpers, logger: any) => {
 	const timetableLogger = createTimetableLogger(logger);
 	
 	return (emitCallback: (data: any) => void) => {
