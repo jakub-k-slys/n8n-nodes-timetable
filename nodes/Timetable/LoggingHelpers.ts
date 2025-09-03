@@ -28,6 +28,9 @@ export class TimetableLogger {
 		this.logger.info(`Timezone: ${timezone}`);
 		this.logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
 		this.logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Stack trace: ${error.stack}`);
+		}
 	}
 
 	logCronRegistration(): void {
@@ -48,6 +51,9 @@ export class TimetableLogger {
 
 	logSkipTriggerError(error: Error | unknown): void {
 		this.logger.error(`Error computing next run time for skip: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Stack trace: ${error.stack}`);
+		}
 	}
 
 	logWorkflowTrigger(currentTime: Date): void {
@@ -56,10 +62,37 @@ export class TimetableLogger {
 
 	logWorkflowOutputError(error: Error | unknown): void {
 		this.logger.error(`Error creating workflow output: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Stack trace: ${error.stack}`);
+		}
 	}
 
 	logExecutionTriggerError(error: Error | unknown): void {
 		this.logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Stack trace: ${error.stack}`);
+		}
+	}
+
+	logCronRegistrationError(error: Error | unknown): void {
+		this.logger.error(`Failed to register cron job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Cron registration stack trace: ${error.stack}`);
+		}
+	}
+
+	logTriggerFunctionCreationError(error: Error | unknown): void {
+		this.logger.error(`Failed to create trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Trigger function creation stack trace: ${error.stack}`);
+		}
+	}
+
+	logNormalProcessingError(error: Error | unknown): void {
+		this.logger.error(`Error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		if (error instanceof Error && error.stack) {
+			this.logger.error(`Normal processing stack trace: ${error.stack}`);
+		}
 	}
 }
 

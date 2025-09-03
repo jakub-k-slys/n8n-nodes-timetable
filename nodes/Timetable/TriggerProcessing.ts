@@ -42,53 +42,94 @@ export const manualProcessing = (context: any) => {
  * @throws NodeOperationError if configuration is invalid or cron registration fails
  */
 export const normalProcessing = (context: any) => {
-	const triggerSlots = context.getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
 	const timetableLogger = createTimetableLogger(context.logger);
-
-	const timezone = context.getTimezone();
-	const staticData = context.getWorkflowStaticData('node') as {
-		lastTriggerTime: number;
-	};
-	if (!staticData.lastTriggerTime) {
-		staticData.lastTriggerTime = 0;
-	}
-	const validation = TriggerSlotsCodec.decode(triggerSlots);
-
-	if (!isRight(validation)) {
-		const errors = PathReporter.report(validation).join('; ');
-		throw new NodeOperationError(
-			context.getNode(),
-			`Invalid trigger configuration: ${errors}`,
-			{
-				description: 'Please check your hour selections, minute values (must be "random" or 0-59), and day of week settings'
-			}
-		);
-	}
-
-	const { hours } = validation.right;
-
-	if (hours.length === 0) {
-		throw new NodeOperationError(
-			context.getNode(),
-			'At least one valid hour must be selected',
-			{
-				description: 'Please add at least one trigger hour using the dropdown menu'
-			}
-		);
-	}
-
-	// Sort by hour for consistent ordering
-	let hourConfigs: HourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
 	
 	try {
-		const nowForNext = moment.tz(timezone).toDate();
-		const nextRun = getNextRunTime(nowForNext, hourConfigs);
-		timetableLogger.logConfigurationLoaded(timezone, hourConfigs, nextRun);
+		const triggerSlots = context.getNodeParameter('triggerSlots', DefaultTriggerSlots) as TriggerSlots;
+
+		let timezone: string;
+		try {
+			timezone = context.getTimezone();
+		} catch (error) {
+			timetableLogger.logNormalProcessingError(error);
+			throw new NodeOperationError(
+				context.getNode(),
+				`Failed to get timezone: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
+		}
+
+		let staticData: { lastTriggerTime: number };
+		try {
+			staticData = context.getWorkflowStaticData('node') as {
+				lastTriggerTime: number;
+			};
+			if (!staticData.lastTriggerTime) {
+				staticData.lastTriggerTime = 0;
+			}
+		} catch (error) {
+			timetableLogger.logNormalProcessingError(error);
+			throw new NodeOperationError(
+				context.getNode(),
+				`Failed to get workflow static data: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
+		}
+
+		const validation = TriggerSlotsCodec.decode(triggerSlots);
+
+		if (!isRight(validation)) {
+			const errors = PathReporter.report(validation).join('; ');
+			throw new NodeOperationError(
+				context.getNode(),
+				`Invalid trigger configuration: ${errors}`,
+				{
+					description: 'Please check your hour selections, minute values (must be "random" or 0-59), and day of week settings'
+				}
+			);
+		}
+
+		const { hours } = validation.right;
+
+		if (hours.length === 0) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'At least one valid hour must be selected',
+				{
+					description: 'Please add at least one trigger hour using the dropdown menu'
+				}
+			);
+		}
+
+		// Sort by hour for consistent ordering
+		let hourConfigs: HourConfig[] =  hours.sort((a, b) => a.hour - b.hour);
+		
+		try {
+			const nowForNext = moment.tz(timezone).toDate();
+			const nextRun = getNextRunTime(nowForNext, hourConfigs);
+			timetableLogger.logConfigurationLoaded(timezone, hourConfigs, nextRun);
+		} catch (error) {
+			timetableLogger.logConfigurationError(timezone, hourConfigs, error);
+		}
+
+		let createTriggerFunction;
+		try {
+			createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, context.helpers, context.logger);
+		} catch (error) {
+			timetableLogger.logNormalProcessingError(error);
+			throw new NodeOperationError(
+				context.getNode(),
+				`Failed to create trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`
+			);
+		}
+
+		return { createTriggerFunction };
 	} catch (error) {
-		timetableLogger.logConfigurationError(timezone, hourConfigs, error);
+		if (error instanceof NodeOperationError) {
+			throw error;
+		}
+		timetableLogger.logNormalProcessingError(error);
+		throw new NodeOperationError(
+			context.getNode(),
+			`Unexpected error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`
+		);
 	}
-
-	const createTriggerFunction = createExecuteTrigger(hourConfigs, timezone, staticData, context.helpers, context.logger);
-
-	return { createTriggerFunction };
 }

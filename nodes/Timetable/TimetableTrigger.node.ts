@@ -129,29 +129,72 @@ export class TimetableTrigger implements INodeType {
 	};
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
-		if (this.getMode() === 'manual') {
-			const { emitData } = manualProcessing(this);
-			const manualTriggerFunction = () => {
-				this.emit(emitData);
-				return Promise.resolve();
-			};
-			return { manualTriggerFunction };
-		}
-
-		const { createTriggerFunction } = normalProcessing(this);
 		const timetableLogger = createTimetableLogger(this.logger);
-
-		const executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
-
+		
 		try {
-			timetableLogger.logCronRegistration();
-			this.helpers.registerCron('* * * * * *', () => executeTrigger());
+			if (this.getMode() === 'manual') {
+				try {
+					const { emitData } = manualProcessing(this);
+					const manualTriggerFunction = () => {
+						this.emit(emitData);
+						return Promise.resolve();
+					};
+					return { manualTriggerFunction };
+				} catch (error) {
+					timetableLogger.logNormalProcessingError(error);
+					throw new NodeOperationError(
+						this.getNode(),
+						`Failed to process manual trigger: ${error instanceof Error ? error.message : 'Unknown error'}`
+					);
+				}
+			}
+
+			let createTriggerFunction;
+			try {
+				const result = normalProcessing(this);
+				createTriggerFunction = result.createTriggerFunction;
+			} catch (error) {
+				timetableLogger.logNormalProcessingError(error);
+				throw error;
+			}
+
+			let executeTrigger;
+			try {
+				executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
+			} catch (error) {
+				timetableLogger.logTriggerFunctionCreationError(error);
+				throw new NodeOperationError(
+					this.getNode(),
+					`Failed to create trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+
+			try {
+				timetableLogger.logCronRegistration();
+				this.helpers.registerCron('* * * * * *', () => {
+					try {
+						executeTrigger();
+					} catch (error) {
+						timetableLogger.logExecutionTriggerError(error);
+					}
+				});
+			} catch (error) {
+				timetableLogger.logCronRegistrationError(error);
+				throw new NodeOperationError(
+					this.getNode(),
+					`Failed to register cron schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+			return {};
 		} catch (error) {
+			if (error instanceof NodeOperationError) {
+				throw error;
+			}
+			timetableLogger.logExecutionTriggerError(error);
 			throw new NodeOperationError(
 				this.getNode(),
-				`Failed to create schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
+				`Unexpected error in trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`
 			);
 		}
-		return {};
 	}
 }
