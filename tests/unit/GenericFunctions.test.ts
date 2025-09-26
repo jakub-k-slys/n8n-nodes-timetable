@@ -13,13 +13,12 @@ jest.mock('moment-timezone', () => {
 
 import { TimetableTrigger } from '../../nodes/Timetable/TimetableTrigger.node';
 
-// Helper function to access private methods for testing
+// Helper function to access private static methods for testing
 const createTriggerHelper = () => {
-	const trigger = new TimetableTrigger();
 	return {
-		getNextSlotHour: (trigger as any).getNextSlotHour.bind(trigger),
-		getNextRunTime: (trigger as any).getNextRunTime.bind(trigger),
-		shouldTriggerAtTime: (trigger as any).shouldTriggerAtTime.bind(trigger)
+		getNextSlotHour: (TimetableTrigger as any).getNextSlotHour,
+		getNextRunTime: (TimetableTrigger as any).getNextRunTime,
+		shouldTriggerAtTime: (TimetableTrigger as any).shouldTriggerNow
 	};
 };
 
@@ -116,9 +115,9 @@ describe('getNextRunTime', () => {
 		const helper = createTriggerHelper();
 		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(15);
-		expect(result.candidate.getDate()).toBe(1); // Same day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(15);
+		expect(result.getDate()).toBe(1); // Same day
 	});
 
 	it('should return next run time with randomization', () => {
@@ -131,9 +130,9 @@ describe('getNextRunTime', () => {
 		const helper = createTriggerHelper();
 		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(30); // Mock value
-		expect(result.candidate.getDate()).toBe(1); // Same day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(30); // Mock value
+		expect(result.getDate()).toBe(1); // Same day
 	});
 
 	it('should return next run time for tomorrow', () => {
@@ -146,9 +145,9 @@ describe('getNextRunTime', () => {
 		const helper = createTriggerHelper();
 		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(0);
-		expect(result.candidate.getDate()).toBe(2); // Next day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(0);
+		expect(result.getDate()).toBe(2); // Next day
 	});
 });
 

@@ -7,7 +7,7 @@ import type {
 import { NodeConnectionType, NodeOperationError, randomInt } from 'n8n-workflow';
 import moment from 'moment-timezone';
 
-// Types and Interfaces
+// Simplified Types
 type DayOfWeek = 'ALL' | 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
 
 interface HourConfig {
@@ -22,21 +22,6 @@ interface TriggerSlots {
 
 interface StaticData {
 	lastTriggerTime?: number;
-}
-
-interface NextSlotResult {
-	hour: number;
-	isTomorrow: boolean;
-}
-
-interface NextRunTime {
-	date: Date;
-	candidate: Date;
-}
-
-interface HourOption {
-	name: string;
-	value: number;
 }
 
 export class TimetableTrigger implements INodeType {
@@ -69,9 +54,7 @@ export class TimetableTrigger implements INodeType {
 				name: 'triggerSlots',
 				type: 'fixedCollection',
 				default: {
-					hours: [
-						{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
-					]
+					hours: [{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }],
 				},
 				placeholder: 'Add trigger hours',
 				description: 'Select the hours when you want the workflow to trigger',
@@ -85,44 +68,20 @@ export class TimetableTrigger implements INodeType {
 						displayName: 'Hours',
 						values: [
 							{
-						displayName: 'Day of Week',
-						name: 'dayOfWeek',
-						type: 'options',
-						default: 'ALL',
-						description: 'Select which day(s) of the week this trigger should run',
-						options: [
-									{
-										name: 'Every Day',
-										value: 'ALL',
-									},
-									{
-										name: 'Friday',
-										value: 'FRI',
-									},
-									{
-										name: 'Monday',
-										value: 'MON',
-									},
-									{
-										name: 'Saturday',
-										value: 'SAT',
-									},
-									{
-										name: 'Sunday',
-										value: 'SUN',
-									},
-									{
-										name: 'Thursday',
-										value: 'THU',
-									},
-									{
-										name: 'Tuesday',
-										value: 'TUE',
-									},
-									{
-										name: 'Wednesday',
-										value: 'WED',
-									},
+								displayName: 'Day of Week',
+								name: 'dayOfWeek',
+								type: 'options',
+								default: 'ALL',
+								description: 'Select which day(s) of the week this trigger should run',
+								options: [
+									{ name: 'Every Day', value: 'ALL' },
+									{ name: 'Friday', value: 'FRI' },
+									{ name: 'Monday', value: 'MON' },
+									{ name: 'Saturday', value: 'SAT' },
+									{ name: 'Sunday', value: 'SUN' },
+									{ name: 'Thursday', value: 'THU' },
+									{ name: 'Tuesday', value: 'TUE' },
+									{ name: 'Wednesday', value: 'WED' },
 								]
 							},
 							{
@@ -131,7 +90,12 @@ export class TimetableTrigger implements INodeType {
 								type: 'options',
 								default: '',
 								description: 'Hour when the workflow should trigger (24-hour format)',
-								options: this.generateHourOptions()
+								options: Array.from({ length: 24 }, (_, i) => ({
+									name: i === 0 ? '00:00 (Midnight)' :
+										  i === 12 ? '12:00 (Noon)' :
+										  `${i.toString().padStart(2, '0')}:00`,
+									value: i
+								}))
 							},
 							{
 								displayName: 'Minute',
@@ -140,85 +104,66 @@ export class TimetableTrigger implements INodeType {
 								default: 'random',
 								description: 'Select specific minute or random',
 								options: [
-									{
-										name: 'Random',
-										value: 'random',
-									},
+									{ name: 'Random', value: 'random' },
 									...Array.from({ length: 60 }, (_, i) => ({
 										name: i.toString().padStart(2, '0'),
 										value: i.toString(),
 									})),
 								],
 							},
-					],
+						],
 					},
 				],
 			},
 		],
 	};
 
-	// Utility Functions
-	private generateHourOptions(): HourOption[] {
-		return Array.from({ length: 24 }, (_, i) => ({
-			name: i === 0 ? '00:00 (Midnight)' :
-				  i === 12 ? '12:00 (Noon)' :
-				  `${i.toString().padStart(2, '0')}:00`,
-			value: i
-		}));
+	// Utility Methods
+	private static dayToNumber(day?: DayOfWeek): number | null {
+		if (!day || day === 'ALL') return null;
+		return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].indexOf(day);
 	}
 
-	private dayStringToNumber(day: DayOfWeek): number | null {
-		switch (day) {
-			case 'SUN': return 0;
-			case 'MON': return 1;
-			case 'TUE': return 2;
-			case 'WED': return 3;
-			case 'THU': return 4;
-			case 'FRI': return 5;
-			case 'SAT': return 6;
-			case 'ALL': return null;
-			default: return null;
-		}
+	private static matchesDay(date: Date, dayOfWeek?: DayOfWeek): boolean {
+		const dayNumber = TimetableTrigger.dayToNumber(dayOfWeek);
+		return dayNumber === null || date.getDay() === dayNumber;
 	}
 
-	private matchesDay(date: Date, dayOfWeek?: DayOfWeek): boolean {
-		if (!dayOfWeek || dayOfWeek === 'ALL') {
-			return true;
-		}
-		const dayNumber = this.dayStringToNumber(dayOfWeek);
-		return dayNumber !== null && date.getDay() === dayNumber;
+	private static handleError(context: ITriggerFunctions, message: string, error: unknown): never {
+		const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+		context.logger.error(`${message}: ${errorMsg}`);
+		throw new NodeOperationError(context.getNode(), `${message}: ${errorMsg}`);
 	}
 
-	private getNextSlotHour(now: Date, hourConfigs: HourConfig[]): NextSlotResult {
+	private static getNextSlotHour(now: Date, hourConfigs: HourConfig[]): { hour: number; isTomorrow: boolean } {
 		const currentHour = now.getHours();
+
+		// Check remaining slots today
 		const todaySlots = hourConfigs
-			.filter(hc => this.matchesDay(now, hc.dayOfWeek))
+			.filter(hc => TimetableTrigger.matchesDay(now, hc.dayOfWeek) && hc.hour > currentHour)
 			.map(hc => hc.hour)
 			.sort((a, b) => a - b);
 
-		for (const hour of todaySlots) {
-			if (currentHour < hour) {
-				return { hour, isTomorrow: false };
-			}
+		if (todaySlots.length > 0) {
+			return { hour: todaySlots[0], isTomorrow: false };
 		}
 
+		// Find next day with available slots
 		for (let daysAhead = 1; daysAhead <= 7; daysAhead++) {
 			const futureDate = new Date(now);
 			futureDate.setDate(futureDate.getDate() + daysAhead);
 
 			const futureDaySlots = hourConfigs
-				.filter(hc => this.matchesDay(futureDate, hc.dayOfWeek))
+				.filter(hc => TimetableTrigger.matchesDay(futureDate, hc.dayOfWeek))
 				.map(hc => hc.hour)
 				.sort((a, b) => a - b);
 
 			if (futureDaySlots.length > 0) {
-				return {
-					hour: futureDaySlots[0],
-					isTomorrow: daysAhead === 1
-				};
+				return { hour: futureDaySlots[0], isTomorrow: daysAhead === 1 };
 			}
 		}
 
+		// Fallback to earliest hour
 		if (hourConfigs.length > 0) {
 			const allHours = hourConfigs.map(hc => hc.hour).sort((a, b) => a - b);
 			return { hour: allHours[0], isTomorrow: true };
@@ -227,103 +172,92 @@ export class TimetableTrigger implements INodeType {
 		throw new NodeOperationError(null as any, 'No valid time slots configured');
 	}
 
-	private findNextValidDate(now: Date, targetHour: number, hourConfigs: HourConfig[]): Date {
+	private static getNextRunTime(now: Date, hourConfigs: HourConfig[]): Date {
+		const { hour } = TimetableTrigger.getNextSlotHour(now, hourConfigs);
+		const hourConfig = hourConfigs.find(hc => hc.hour === hour)!;
+
+		const minute = hourConfig?.minute === 'random' ? randomInt(0, 60) : (hourConfig?.minute ?? 0);
+
+		// Find next valid date for this hour
+		const nextRun = TimetableTrigger.findNextValidDate(now, hour, hourConfigs);
+		nextRun.setHours(hour, minute, 0, 0);
+
+		return nextRun;
+	}
+
+	private static findNextValidDate(now: Date, targetHour: number, hourConfigs: HourConfig[]): Date {
 		const relevantConfigs = hourConfigs.filter(hc => hc.hour === targetHour);
 
+		// Check if we can use today
 		for (const config of relevantConfigs) {
-			if (this.matchesDay(now, config.dayOfWeek) && now.getHours() < targetHour) {
+			if (TimetableTrigger.matchesDay(now, config.dayOfWeek) && now.getHours() < targetHour) {
 				return new Date(now);
 			}
 		}
 
+		// Check future days
 		for (let daysAhead = 1; daysAhead <= 7; daysAhead++) {
 			const futureDate = new Date(now);
 			futureDate.setDate(futureDate.getDate() + daysAhead);
 
 			for (const config of relevantConfigs) {
-				if (this.matchesDay(futureDate, config.dayOfWeek)) {
+				if (TimetableTrigger.matchesDay(futureDate, config.dayOfWeek)) {
 					return futureDate;
 				}
 			}
 		}
 
+		// Fallback to tomorrow
 		const fallback = new Date(now);
 		fallback.setDate(fallback.getDate() + 1);
 		return fallback;
 	}
 
-	private getNextRunTime(now: Date, hourConfigs: HourConfig[]): NextRunTime {
-		const { hour } = this.getNextSlotHour(now, hourConfigs);
-
-		const hourConfig = hourConfigs.find(hc => hc.hour === hour)!;
-		let minute: number;
-		if (hourConfig?.minute === 'random') {
-			minute = randomInt(0, 60);
-		} else {
-			minute = hourConfig?.minute ?? 0;
-		}
-
-		const nextRun = this.findNextValidDate(now, hour, hourConfigs);
-		nextRun.setHours(hour, minute, 0, 0);
-
-		return {
-			date: now,
-			candidate: nextRun
-		};
-	}
-
-	private shouldTriggerAtTime(
-		currentTime: Date,
-		lastTriggerTime: number | undefined,
-		hourConfigs: HourConfig[]
-	): boolean {
+	private static shouldTriggerNow(currentTime: Date, lastTriggerTime: number | undefined, hourConfigs: HourConfig[]): boolean {
 		const currentHour = currentTime.getHours();
 
-		const matchingConfigs = hourConfigs.filter(hc =>
-			hc.hour === currentHour && this.matchesDay(currentTime, hc.dayOfWeek)
+		// Check if current hour matches any configured slot
+		const hasValidSlot = hourConfigs.some(hc =>
+			hc.hour === currentHour && TimetableTrigger.matchesDay(currentTime, hc.dayOfWeek)
 		);
 
-		const hasValidSlot = matchingConfigs.length > 0;
-
-		if (!hasValidSlot) {
-			return false;
+		if (!hasValidSlot || !lastTriggerTime) {
+			return hasValidSlot;
 		}
 
-		if (!lastTriggerTime) {
-			return true;
-		}
-
+		// Prevent multiple triggers within the same hour
 		const lastTrigger = new Date(lastTriggerTime);
 		const timeSinceLastTrigger = currentTime.getTime() - lastTrigger.getTime();
-
 		const oneHourMs = 60 * 60 * 1000;
-		if (timeSinceLastTrigger < oneHourMs && lastTrigger.getHours() === currentHour) {
-			return false;
-		}
 
-		return true;
+		return !(timeSinceLastTrigger < oneHourMs && lastTrigger.getHours() === currentHour);
 	}
 
-	private shouldTriggerNow(
-		lastTriggerTime: number | undefined,
-		config: HourConfig[],
-		timezone: string
-	): boolean {
-		const now = moment.tz(timezone).toDate();
-		return this.shouldTriggerAtTime(now, lastTriggerTime, config);
-	}
-
-	private createResultData(
-		momentTz: moment.Moment,
-		timezone: string,
-		hourConfigs: HourConfig[],
-		nextRun: NextRunTime,
-		isManual: boolean
-	) {
-		return {
+	private static createResultData(momentTz: moment.Moment, timezone: string, hourConfigs: HourConfig[], nextRun: Date, isManual: boolean) {
+		const baseData = {
 			timestamp: momentTz.toISOString(true),
 			'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
 			'Readable time': momentTz.format('h:mm:ss a'),
+			'Manual execution': isManual,
+		};
+
+		if (isManual) {
+			return {
+				...baseData,
+				year: momentTz.year(),
+				month: momentTz.month() + 1,
+				day: momentTz.date(),
+				hour: momentTz.hour(),
+				minute: momentTz.minute(),
+				second: momentTz.second(),
+				dayOfWeek: momentTz.day(),
+				weekday: momentTz.format('dddd'),
+				timezone: timezone,
+			};
+		}
+
+		return {
+			...baseData,
 			'Day of week': momentTz.format('dddd'),
 			Year: momentTz.format('YYYY'),
 			Month: momentTz.format('MMMM'),
@@ -335,142 +269,91 @@ export class TimetableTrigger implements INodeType {
 			'Trigger hours': hourConfigs.map(hc => ({
 				hour: hc.hour,
 				minute: hc.minute,
-				dayOfWeek: hc.dayOfWeek
+				dayOfWeek: hc.dayOfWeek,
 			})),
-			'Next scheduled': nextRun.candidate.toISOString(),
-			'Next scheduled readable': moment.tz(nextRun.candidate, timezone).format('MMMM Do YYYY, h:mm:ss a'),
-			'Manual execution': isManual
+			'Next scheduled': nextRun.toISOString(),
+			'Next scheduled readable': moment.tz(nextRun, timezone).format('MMMM Do YYYY, h:mm:ss a'),
 		};
 	}
 
-	private createSimpleResultData(
-		momentTz: moment.Moment,
-		timezone: string
-	) {
-		return {
-			timestamp: momentTz.toISOString(true),
-			'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
-			'Readable time': momentTz.format('h:mm:ss a'),
-			'Manual execution': true,
-			year: momentTz.year(),
-			month: momentTz.month() + 1,
-			day: momentTz.date(),
-			hour: momentTz.hour(),
-			minute: momentTz.minute(),
-			second: momentTz.second(),
-			dayOfWeek: momentTz.day(),
-			weekday: momentTz.format('dddd'),
-			timezone: timezone,
-		};
+	private static validateTriggerSlots(triggerSlots: TriggerSlots, context: ITriggerFunctions): HourConfig[] {
+		if (!triggerSlots?.hours || triggerSlots.hours.length === 0) {
+			throw new NodeOperationError(context.getNode(), 'At least one valid hour must be selected', {
+				description: 'Please add at least one trigger hour using the dropdown menu',
+			});
+		}
+
+		for (const hourConfig of triggerSlots.hours) {
+			if (typeof hourConfig.hour !== 'number' || hourConfig.hour < 0 || hourConfig.hour > 23) {
+				throw new NodeOperationError(context.getNode(), `Invalid hour: ${hourConfig.hour}. Must be between 0 and 23.`);
+			}
+			if (hourConfig.minute !== 'random' &&
+				(typeof hourConfig.minute !== 'number' || hourConfig.minute < 0 || hourConfig.minute > 59)) {
+				throw new NodeOperationError(context.getNode(), `Invalid minute: ${hourConfig.minute}. Must be "random" or between 0 and 59.`);
+			}
+		}
+
+		return triggerSlots.hours.sort((a, b) => a.hour - b.hour);
 	}
 
 	// Processing Methods
-	private manualProcessing(context: ITriggerFunctions) {
+	private static processManualTrigger(context: ITriggerFunctions) {
 		const timezone = context.getTimezone();
 		const momentTz = moment.tz(timezone);
 
 		context.logger.info(`✓ MANUAL EXECUTION at ${moment.utc(momentTz.toDate()).format('YYYY-MM-DD HH:mm:ss')} UTC`);
 		context.logger.info(`Manual execution in timezone ${timezone}: ${momentTz.format('YYYY-MM-DD HH:mm:ss')}`);
 
-		const resultData = this.createSimpleResultData(momentTz, timezone);
-		const emitData = [context.helpers.returnJsonArray([resultData])];
-
-		return { emitData };
+		const resultData = TimetableTrigger.createResultData(momentTz, timezone, [], new Date(), true);
+		return [context.helpers.returnJsonArray([resultData])];
 	}
 
-	private normalProcessing(context: ITriggerFunctions) {
+	private static processNormalTrigger(context: ITriggerFunctions) {
 		const defaultTriggerSlots: TriggerSlots = {
-			hours: [
-				{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }
-			]
+			hours: [{ hour: 12, minute: 'random', dayOfWeek: 'ALL' }],
 		};
 
-		const triggerSlots = context.getNodeParameter('triggerSlots', defaultTriggerSlots) as TriggerSlots;
-
 		let timezone: string;
+		let staticData: StaticData;
+
 		try {
 			timezone = context.getTimezone();
-		} catch (error) {
-			context.logger.error(`Error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`);
-			throw new NodeOperationError(
-				context.getNode(),
-				`Failed to get timezone: ${error instanceof Error ? error.message : 'Unknown error'}`
-			);
-		}
-
-		let staticData: StaticData;
-		try {
 			staticData = context.getWorkflowStaticData('node') as StaticData;
 			if (!staticData.lastTriggerTime) {
 				staticData.lastTriggerTime = 0;
 			}
 		} catch (error) {
-			context.logger.error(`Error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`);
-			throw new NodeOperationError(
-				context.getNode(),
-				`Failed to get workflow static data: ${error instanceof Error ? error.message : 'Unknown error'}`
-			);
+			TimetableTrigger.handleError(context, 'Failed to get required data', error);
 		}
 
-		if (!triggerSlots?.hours || triggerSlots.hours.length === 0) {
-			throw new NodeOperationError(
-				context.getNode(),
-				'At least one valid hour must be selected',
-				{
-					description: 'Please add at least one trigger hour using the dropdown menu'
-				}
-			);
-		}
+		const triggerSlots = context.getNodeParameter('triggerSlots', defaultTriggerSlots) as TriggerSlots;
+		const hourConfigs = TimetableTrigger.validateTriggerSlots(triggerSlots, context);
 
-		// Basic validation
-		for (const hourConfig of triggerSlots.hours) {
-			if (typeof hourConfig.hour !== 'number' || hourConfig.hour < 0 || hourConfig.hour > 23) {
-				throw new NodeOperationError(
-					context.getNode(),
-					`Invalid hour: ${hourConfig.hour}. Must be between 0 and 23.`
-				);
-			}
-			if (hourConfig.minute !== 'random' && (typeof hourConfig.minute !== 'number' || hourConfig.minute < 0 || hourConfig.minute > 59)) {
-				throw new NodeOperationError(
-					context.getNode(),
-					`Invalid minute: ${hourConfig.minute}. Must be "random" or between 0 and 59.`
-				);
-			}
-		}
-
-		const hourConfigs: HourConfig[] = triggerSlots.hours.sort((a, b) => a.hour - b.hour);
-
+		// Log configuration
 		try {
-			const nowForNext = moment.tz(timezone).toDate();
-			const nextRun = this.getNextRunTime(nowForNext, hourConfigs);
+			const nextRun = TimetableTrigger.getNextRunTime(moment.tz(timezone).toDate(), hourConfigs);
 			context.logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
 			context.logger.info(`Timezone: ${timezone}`);
 			context.logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
-			context.logger.info(`Next scheduled trigger: ${nextRun.candidate.toISOString()} (${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
+			context.logger.info(`Next scheduled trigger: ${nextRun.toISOString()} (${moment.utc(nextRun).format('YYYY-MM-DD HH:mm:ss')} UTC)`);
 		} catch (error) {
-			context.logger.info(`Configuration loaded at ${new Date().toISOString()}:`);
-			context.logger.info(`Timezone: ${timezone}`);
-			context.logger.info(`Hour configs: ${JSON.stringify(hourConfigs)}`);
 			context.logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 
-		const createTriggerFunction = (emitCallback: (data: any) => void) => {
+		return (emitCallback: (data: any) => void) => {
 			try {
 				const currentTime = moment.tz(timezone).toDate();
-				const shouldTrigger = this.shouldTriggerNow(staticData.lastTriggerTime, hourConfigs, timezone);
+				const shouldTrigger = TimetableTrigger.shouldTriggerNow(currentTime, staticData.lastTriggerTime, hourConfigs);
 
-				const currentTimeUtc = moment.utc(currentTime);
-				context.logger.debug(`Trigger check at ${currentTimeUtc.format('YYYY-MM-DD HH:mm:ss')} UTC (${currentTime.toISOString()})`);
-				context.logger.debug(`Current time in timezone ${timezone}: ${moment.tz(timezone).format('YYYY-MM-DD HH:mm:ss')}`);
-				context.logger.debug(`Last trigger time: ${staticData.lastTriggerTime ? new Date(staticData.lastTriggerTime).toISOString() : 'never'}`);
+				context.logger.debug(`Trigger check at ${moment.utc(currentTime).format('YYYY-MM-DD HH:mm:ss')} UTC`);
 				context.logger.debug(`Should trigger: ${shouldTrigger}`);
 
 				if (!shouldTrigger) {
 					try {
-						const nextRun = this.getNextRunTime(currentTime, hourConfigs);
-						context.logger.debug(`Not triggering. Next scheduled: ${moment.utc(nextRun.candidate).format('YYYY-MM-DD HH:mm:ss')} UTC`);
+						const nextRun = TimetableTrigger.getNextRunTime(currentTime, hourConfigs);
+						context.logger.debug(`Not triggering. Next scheduled: ${moment.utc(nextRun).format('YYYY-MM-DD HH:mm:ss')} UTC`);
 					} catch (error) {
-						context.logger.error(`Error computing next run time for skip: ${error instanceof Error ? error.message : 'Unknown error'}`);
+						context.logger.error(`Error computing next run time: ${error instanceof Error ? error.message : 'Unknown error'}`);
 					}
 					return;
 				}
@@ -480,8 +363,8 @@ export class TimetableTrigger implements INodeType {
 
 				try {
 					const momentTz = moment.tz(timezone);
-					const nextRun = this.getNextRunTime(momentTz.toDate(), hourConfigs);
-					const resultData = this.createResultData(momentTz, timezone, hourConfigs, nextRun, false);
+					const nextRun = TimetableTrigger.getNextRunTime(momentTz.toDate(), hourConfigs);
+					const resultData = TimetableTrigger.createResultData(momentTz, timezone, hourConfigs, nextRun, false);
 					emitCallback([context.helpers.returnJsonArray([resultData])]);
 				} catch (error) {
 					context.logger.error(`Error creating workflow output: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -491,7 +374,7 @@ export class TimetableTrigger implements INodeType {
 						'Readable date': momentTz.format('MMMM Do YYYY, h:mm:ss a'),
 						'Readable time': momentTz.format('h:mm:ss a'),
 						'Manual execution': false,
-						error: 'Failed to compute next run time - workflow executed with fallback data'
+						error: 'Failed to compute next run time - workflow executed with fallback data',
 					};
 					emitCallback([context.helpers.returnJsonArray([fallbackData])]);
 				}
@@ -499,77 +382,38 @@ export class TimetableTrigger implements INodeType {
 				context.logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
 			}
 		};
-
-		return { createTriggerFunction };
 	}
 
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		try {
 			if (this.getMode() === 'manual') {
-				try {
-					const timetableTrigger = new TimetableTrigger();
-					const { emitData } = timetableTrigger.manualProcessing(this);
-					const manualTriggerFunction = () => {
+				const emitData = TimetableTrigger.processManualTrigger(this);
+				return {
+					manualTriggerFunction: () => {
 						this.emit(emitData);
 						return Promise.resolve();
-					};
-					return { manualTriggerFunction };
-				} catch (error) {
-					this.logger.error(`Error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`);
-					throw new NodeOperationError(
-						this.getNode(),
-						`Failed to process manual trigger: ${error instanceof Error ? error.message : 'Unknown error'}`
-					);
-				}
-			}
-
-			let createTriggerFunction;
-			try {
-				const timetableTrigger = new TimetableTrigger();
-				const result = timetableTrigger.normalProcessing(this);
-				createTriggerFunction = result.createTriggerFunction;
-			} catch (error) {
-				this.logger.error(`Error in normal processing: ${error instanceof Error ? error.message : 'Unknown error'}`);
-				throw error;
-			}
-
-			let executeTrigger;
-			try {
-				executeTrigger = () => createTriggerFunction((data: any) => this.emit(data));
-			} catch (error) {
-				this.logger.error(`Failed to create trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`);
-				throw new NodeOperationError(
-					this.getNode(),
-					`Failed to create trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`
-				);
-			}
-
-			try {
-				this.logger.info('Registering cron job to run every minute for condition checking');
-				this.helpers.registerCron('* * * * * *', () => {
-					try {
-						executeTrigger();
-					} catch (error) {
-						this.logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
 					}
-				});
-			} catch (error) {
-				this.logger.error(`Failed to register cron job: ${error instanceof Error ? error.message : 'Unknown error'}`);
-				throw new NodeOperationError(
-					this.getNode(),
-					`Failed to register cron schedule: ${error instanceof Error ? error.message : 'Unknown error'}`
-				);
+				};
 			}
+
+			const createTriggerFunction = TimetableTrigger.processNormalTrigger(this);
+
+			this.logger.info('Registering cron job to run every minute for condition checking');
+			this.helpers.registerCron('* * * * * *', () => {
+				try {
+					createTriggerFunction((data: any) => this.emit(data));
+				} catch (error) {
+					this.logger.error(`Error in execution trigger: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			});
+
 			return {};
 		} catch (error) {
 			if (error instanceof NodeOperationError) {
 				throw error;
 			}
 			this.logger.error(`Unexpected error in trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`);
-			throw new NodeOperationError(
-				this.getNode(),
-				`Unexpected error in trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`
-			);
+			throw new NodeOperationError(this.getNode(), `Unexpected error in trigger function: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 }
