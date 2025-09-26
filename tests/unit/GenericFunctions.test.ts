@@ -11,23 +11,34 @@ jest.mock('moment-timezone', () => {
 	};
 });
 
-import { 
-	getNextSlotHour, 
-	getNextRunTime, 
-	shouldTriggerAtTime
-} from '../../nodes/Timetable/GenericFunctions';
-import type { HourConfig } from '../../nodes/Timetable/SchedulerInterface';
+import { TimetableTrigger } from '../../nodes/Timetable/TimetableTrigger.node';
+
+// Helper function to access private static methods for testing
+const createTriggerHelper = () => {
+	return {
+		getNextSlotHour: (TimetableTrigger as any).getNextSlotHour,
+		getNextRunTime: (TimetableTrigger as any).getNextRunTime,
+		shouldTriggerAtTime: (TimetableTrigger as any).shouldTriggerNow
+	};
+};
+
+type HourConfig = {
+	hour: number;
+	minute: number | 'random';
+	dayOfWeek?: 'ALL' | 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+};
 
 describe('getNextSlotHour', () => {
 	it('should return next available slot within the same day', () => {
+		const helper = createTriggerHelper();
 		const now = new Date('2024-01-01T10:00:00Z');
 		const hourConfigs: HourConfig[] = [
 			{ hour: 12, minute: 'random', dayOfWeek: 'ALL' },
 			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' },
 			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
 		];
-		
-		const result = getNextSlotHour(now, hourConfigs);
+
+		const result = helper.getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -43,7 +54,8 @@ describe('getNextSlotHour', () => {
 			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextSlotHour(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 16,
@@ -59,7 +71,8 @@ describe('getNextSlotHour', () => {
 			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextSlotHour(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 12,
@@ -73,7 +86,8 @@ describe('getNextSlotHour', () => {
 			{ hour: 15, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextSlotHour(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 		
 		expect(result).toEqual({
 			hour: 15,
@@ -98,11 +112,12 @@ describe('getNextRunTime', () => {
 			{ hour: 16, minute: 30, dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextRunTime(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(15);
-		expect(result.candidate.getDate()).toBe(1); // Same day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(15);
+		expect(result.getDate()).toBe(1); // Same day
 	});
 
 	it('should return next run time with randomization', () => {
@@ -112,11 +127,12 @@ describe('getNextRunTime', () => {
 			{ hour: 16, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextRunTime(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(30); // Mock value
-		expect(result.candidate.getDate()).toBe(1); // Same day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(30); // Mock value
+		expect(result.getDate()).toBe(1); // Same day
 	});
 
 	it('should return next run time for tomorrow', () => {
@@ -126,11 +142,12 @@ describe('getNextRunTime', () => {
 			{ hour: 16, minute: 0, dayOfWeek: 'ALL' }
 		];
 		
-		const result = getNextRunTime(now, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.getNextRunTime(now, hourConfigs);
 		
-		expect(result.candidate.getHours()).toBe(12);
-		expect(result.candidate.getMinutes()).toBe(0);
-		expect(result.candidate.getDate()).toBe(2); // Next day
+		expect(result.getHours()).toBe(12);
+		expect(result.getMinutes()).toBe(0);
+		expect(result.getDate()).toBe(2); // Next day
 	});
 });
 
@@ -142,7 +159,8 @@ describe('shouldTriggerAtTime', () => {
 			{ hour: 21, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 		
 		expect(result).toBe(false);
 	});
@@ -154,7 +172,8 @@ describe('shouldTriggerAtTime', () => {
 			{ hour: actualHour, minute: 'random', dayOfWeek: 'ALL' }
 		];
 		
-		const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -169,7 +188,8 @@ describe('shouldTriggerAtTime', () => {
 		// Last trigger was 10 minutes ago in the same hour
 		const lastTriggerTime = currentTime.getTime() - (10 * 60 * 1000);
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(false);
 	});
@@ -184,7 +204,8 @@ describe('shouldTriggerAtTime', () => {
 		// Last trigger was more than 1 hour ago
 		const lastTriggerTime = currentTime.getTime() - (2 * 60 * 60 * 1000);
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -201,7 +222,8 @@ describe('shouldTriggerAtTime', () => {
 		earlierTime.setHours(actualCurrentHour - 1); // Previous hour
 		const lastTriggerTime = earlierTime.getTime();
 		
-		const result = shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
+		const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, lastTriggerTime, hourConfigs);
 		
 		expect(result).toBe(true);
 	});
@@ -216,7 +238,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'MON' }
 			];
 			
-			const result = getNextSlotHour(now, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -230,7 +253,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'MON' }
 			];
 			
-			const result = getNextSlotHour(now, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -244,7 +268,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
 			];
 			
-			const result = getNextSlotHour(now, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -258,7 +283,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'ALL' }
 			];
 			
-			const result = getNextSlotHour(now, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.getNextSlotHour(now, hourConfigs);
 			
 			expect(result).toEqual({
 				hour: 14,
@@ -274,7 +300,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
 			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(false);
 		});
@@ -285,7 +312,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'FRI' }
 			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(true);
 		});
@@ -296,7 +324,8 @@ describe('Day-specific scheduling', () => {
 				{ hour: 14, minute: 'random', dayOfWeek: 'ALL' }
 			];
 			
-			const result = shouldTriggerAtTime(currentTime, undefined, hourConfigs);
+			const helper = createTriggerHelper();
+		const result = helper.shouldTriggerAtTime(currentTime, undefined, hourConfigs);
 			
 			expect(result).toBe(true);
 		});
